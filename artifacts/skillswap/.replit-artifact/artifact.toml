@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "SkillSwap"
+description = "A responsive peer-to-peer skill exchange platform for college students to teach what they know, learn what they need, discover complementary partners, schedule sessions, and share feedback."
+version = "1.0.0"
+id = "artifacts/skillswap"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 21899
+
+[services.development]
+run = "pnpm --filter @workspace/skillswap run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/skillswap", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/skillswap/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "21899"
+BASE_PATH = "/"
