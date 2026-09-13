@@ -63,6 +63,7 @@ export type Session = {
   duration: string;
   type: 'Video call' | 'In person';
   status: 'upcoming' | 'completed' | 'cancelled';
+  meetingUrl?: string;
 };
 
 export type Feedback = {
@@ -106,7 +107,8 @@ export type AppData = {
   notes: Note[];
 };
 
-export const CURRENT_USER_ID = 'alex';
+export let CURRENT_USER_ID = '';
+export const setCurrentUserId = (id: string) => { CURRENT_USER_ID = id; };
 export const DEMO_PASSWORD = '123456';
 export const STORAGE_KEY = 'skillswap-demo-state-v1';
 export const AUTH_KEY = 'skillswap-demo-auth-v1';
@@ -274,7 +276,7 @@ export const setAuth = (value: boolean) => {
   localStorage.setItem(AUTH_KEY, String(value));
 };
 
-export const makeId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+export const makeId = (_prefix: string) => typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
 export const formatDate = (value: string) =>
   new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(`${value}T12:00:00`));
