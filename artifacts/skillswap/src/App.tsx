@@ -344,9 +344,7 @@ function AuthPage({ mode }: { mode: 'login' | 'register' }) {
     try {
       const session = mode === 'login' ? await signIn(email.trim(), password) : await signUp(name.trim(), email.trim(), password);
       if (!session) {
-        notify('Check your email to confirm your account, then log in.', 'info');
-        setLoading(false);
-        return;
+        throw new Error('Could not open your SkillSwap account. Turn off Confirm email in Supabase Authentication settings and try again.');
       }
       setCurrentUserId(session.user.id);
       setAuthenticated(true);

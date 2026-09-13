@@ -43,13 +43,24 @@ export async function signIn(email: string, password: string) {
 }
 
 export async function signUp(name: string, email: string, password: string) {
-  const { data, error } = await getSupabase().auth.signUp({
+  const sb = getSupabase();
+  const { data, error } = await sb.auth.signUp({
     email,
     password,
     options: { data: { full_name: name } },
   });
   if (error) throw error;
-  return data.session;
+
+  // SkillSwap uses direct email/password access. If the Supabase project still
+  // has email confirmation enabled, signUp returns no session. Try an immediate
+  // login so the app can continue when confirmation is disabled.
+  if (data.session) return data.session;
+
+  const { data: loginData, error: loginError } = await sb.auth.signInWithPassword({ email, password });
+  if (loginError) {
+    throw new Error('Direct signup is enabled in the app, but Supabase is still requiring email confirmation. Turn off Confirm email in Supabase Authentication settings and try again.');
+  }
+  return loginData.session;
 }
 
 export async function signOut() {
@@ -166,7 +177,14 @@ export async function syncAppData(next: AppData, before: AppData, currentUserId:
     if (error) throw error;
   }
 
-  for (const skill of next.skills.filter(s => s.ownerId === currentUserId)) {
+  // Reconcile the current user's skills as one complete set. This avoids stale
+  // upserts/races that can leave a Learn skill stored as Teach or disappear
+  // after a refresh. The UI remains the source of truth for this user's list.
+  const nextOwnSkills = next.skills.filter(s => s.ownerId === currentUserId);
+  const { error: clearSkillsError } = await sb.from('user_skills').delete().eq('user_id', currentUserId);
+  if (clearSkillsError) throw clearSkillsError;
+
+  for (const skill of nextOwnSkills) {
     const { data: existingSkill, error: lookupError } = await sb.from('skills').select('id').eq('name', skill.name).maybeSingle();
     if (lookupError) throw lookupError;
     let skillId = existingSkill?.id as string | undefined;
@@ -178,12 +196,14 @@ export async function syncAppData(next: AppData, before: AppData, currentUserId:
       const { error: skillError } = await sb.from('skills').update({ category: skill.category }).eq('id', skillId);
       if (skillError) throw skillError;
     }
-    const { error: usError } = await sb.from('user_skills').upsert({ id: skill.id, user_id: currentUserId, skill_id: skillId, skill_type: skill.mode }, { onConflict: 'user_id,skill_id,skill_type' });
+    const { error: usError } = await sb.from('user_skills').insert({
+      id: skill.id,
+      user_id: currentUserId,
+      skill_id: skillId,
+      skill_type: skill.mode,
+    });
     if (usError) throw usError;
   }
-  const beforeOwnSkills = before.skills.filter(s => s.ownerId === currentUserId);
-  const nextOwnSkills = next.skills.filter(s => s.ownerId === currentUserId);
-  await deleteMissing(sb, 'user_skills', beforeOwnSkills.map(s => ({ id: s.id, ...s })), nextOwnSkills.map(s => ({ id: s.id, ...s })));
 
   for (const request of next.requests.filter(r => r.senderId === currentUserId || r.receiverId === currentUserId)) {
     const { error } = await sb.from('swap_requests').upsert({
