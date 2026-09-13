@@ -47,7 +47,7 @@ export default defineConfig({
   root: path.resolve(import.meta.dirname),
 
   build: {
-    outDir: path.resolve(import.meta.dirname, 'dist/public'),
+    outDir: path.resolve(import.meta.dirname, 'dist'),
     emptyOutDir: true,
   },
 
@@ -67,4 +67,3 @@ export default defineConfig({
     allowedHosts: true,
   },
 });
-  
