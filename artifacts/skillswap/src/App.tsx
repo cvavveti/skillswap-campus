@@ -390,11 +390,21 @@ function DiscoverPage() {
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('All');
   const categories = ['All', 'Technology', 'Design', 'Communication', 'Creative', 'Business'];
-  const matches = useMemo(() => data.users.filter((user) => user.id !== CURRENT_USER_ID).map((user) => ({ user, match: getMatchPercentage(currentUser, user) })).filter(({ user, match }) => {
-    const text = `${user.name} ${user.course} ${user.college} ${user.skillsToTeach.join(' ')} ${user.skillsToLearn.join(' ')}`.toLowerCase();
-    const categorySkill = category === 'All' || user.skillsToTeach.some((name) => data.skills.some((skill) => skill.name === name && skill.category === category));
-    return text.includes(query.toLowerCase()) && categorySkill;
-  }).sort((a, b) => b.match.score - a.match.score), [category, currentUser, data.skills, data.users, query]);
+  const matches = useMemo(() => {
+    const everyoneElse = data.users
+      .filter((user) => user.id !== CURRENT_USER_ID)
+      .map((user) => ({ user, match: getMatchPercentage(currentUser, user) }));
+
+    const filtered = everyoneElse.filter(({ user }) => {
+      const text = `${user.name} ${user.course} ${user.college} ${user.skillsToTeach.join(' ')} ${user.skillsToLearn.join(' ')}`.toLowerCase();
+      const categorySkill = category === 'All' || user.skillsToTeach.some((name) => data.skills.some((skill) => skill.name === name && skill.category === category));
+      return text.includes(query.toLowerCase()) && categorySkill;
+    });
+
+    // With no filters, show every other registered student and sort compatible people first.
+    const visible = filtered.length || query.trim() || category !== 'All' ? filtered : everyoneElse;
+    return visible.sort((a, b) => b.match.score - a.match.score);
+  }, [category, currentUser, data.skills, data.users, query]);
   const request = (user: User) => {
     if (data.requests.some((item) => item.senderId === CURRENT_USER_ID && item.receiverId === user.id && item.status === 'pending')) { notify('You already have a request out to this person.', 'info'); return; }
     updateData((current) => ({ ...current, requests: [...current.requests, { id: makeId('req'), senderId: CURRENT_USER_ID, receiverId: user.id, status: 'pending', message: `Hi ${user.name.split(' ')[0]} — I think we could make a good exchange.`, createdAt: new Date().toISOString() }] }));
@@ -637,6 +647,7 @@ function Router() {
 }
 
 function App() {
+  const [currentUserId, setCurrentUserIdState] = useState('');
   const [data, setData] = useState<AppData>({ users: [], skills: [], requests: [], messages: [], sessions: [], feedback: [], notifications: [], notes: [] });
   const [authenticated, setAuthenticated] = useState(false);
   const [ready, setReady] = useState(false);
@@ -645,6 +656,7 @@ function App() {
   const refresh = async (userId: string) => {
     const remote = await loadRemoteData(userId);
     setCurrentUserId(userId);
+    setCurrentUserIdState(userId);
     setData(remote);
   };
 
@@ -668,22 +680,36 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!authenticated || !CURRENT_USER_ID) return;
-    return subscribeToRealtime(CURRENT_USER_ID, () => { refresh(CURRENT_USER_ID).catch(console.error); });
-  }, [authenticated]);
+    if (!authenticated || !currentUserId) return;
+    return subscribeToRealtime(currentUserId, () => { refresh(currentUserId).catch(console.error); });
+  }, [authenticated, currentUserId]);
 
   const updateData = (updater: AppData | ((current: AppData) => AppData)) => {
     setData((current) => {
       const next = typeof updater === 'function' ? updater(current) : updater;
-      if (CURRENT_USER_ID) syncAppData(next, current, CURRENT_USER_ID).catch((error) => console.error('Supabase sync failed', error));
+      if (currentUserId) syncAppData(next, current, currentUserId).catch((error) => console.error('Supabase sync failed', error));
       return next;
     });
   };
 
   const notify = (message: string, kind: ToastKind = 'success') => { setToast({ message, kind }); window.setTimeout(() => setToast(null), 3600); };
-  const currentUser = data.users.find((user) => user.id === CURRENT_USER_ID) || { id: CURRENT_USER_ID, name: 'Student', email: '', college: 'College student', course: '', year: '', bio: '', skillsToTeach: [], skillsToLearn: [], rating: 5, availability: 'Flexible' };
+
+  const currentUser = data.users.find((user) => user.id === currentUserId) || {
+    id: currentUserId,
+    name: 'Student',
+    email: '',
+    college: 'College student',
+    course: '',
+    year: '',
+    bio: '',
+    skillsToTeach: [],
+    skillsToLearn: [],
+    rating: 5,
+    availability: 'Flexible'
+  };
+
   if (!ready) return <PageLoading />;
+
   return <StoreContext.Provider value={{ data, updateData, currentUser, notify, authenticated, setAuthenticated }}><WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}><Router /></WouterRouter><ToastLayer toast={toast} dismiss={() => setToast(null)} /></StoreContext.Provider>;
 }
-
 export default App;
