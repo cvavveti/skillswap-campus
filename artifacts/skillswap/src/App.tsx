@@ -405,10 +405,19 @@ function DiscoverPage() {
     const visible = filtered.length || query.trim() || category !== 'All' ? filtered : everyoneElse;
     return visible.sort((a, b) => b.match.score - a.match.score);
   }, [category, currentUser, data.skills, data.users, query]);
-  const request = (user: User) => {
+  const request = async (user: User) => {
     if (data.requests.some((item) => item.senderId === CURRENT_USER_ID && item.receiverId === user.id && item.status === 'pending')) { notify('You already have a request out to this person.', 'info'); return; }
-    updateData((current) => ({ ...current, requests: [...current.requests, { id: makeId('req'), senderId: CURRENT_USER_ID, receiverId: user.id, status: 'pending', message: `Hi ${user.name.split(' ')[0]} — I think we could make a good exchange.`, createdAt: new Date().toISOString() }] }));
-    notify(`Request sent to ${user.name.split(' ')[0]}.`, 'success');
+    const request = { id: makeId('req'), senderId: CURRENT_USER_ID, receiverId: user.id, status: 'pending' as const, message: `Hi ${user.name.split(' ')[0]} — I think we could make a good exchange.`, createdAt: new Date().toISOString() };
+    try {
+      const { getSupabase } = await import('./lib/supabase-client');
+      const { error } = await getSupabase().from('swap_requests').insert({ id: request.id, sender_id: request.senderId, receiver_id: request.receiverId, status: request.status, message: request.message, created_at: request.createdAt });
+      if (error) throw error;
+      updateData((current) => ({ ...current, requests: [...current.requests, request] }));
+      notify(`Request sent to ${user.name.split(' ')[0]}.`, 'success');
+    } catch (error) {
+      console.error('Failed to send exchange request:', error);
+      notify('Could not send the exchange request.', 'error');
+    }
   };
   return <div className="fade-up"><PageTitle eyebrow="Find your people" title="Discover your next exchange." body="Search by the skill you want, the one you can share, or simply a name. The best match is not always the obvious one." /><div className="mb-7 flex flex-col gap-3 sm:flex-row"><label className="relative flex-1"><Search size={17} className="absolute left-4 top-3.5 text-[hsl(var(--muted-foreground))]" /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Try “React”, “writing”, or a name…" className="h-11 w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] pl-11 pr-4 text-sm outline-none focus:border-[hsl(var(--primary))]" data-testid="input-discover-search" /></label><button className="flex h-11 items-center justify-center gap-2 rounded-xl border border-[hsl(var(--border))] px-4 text-sm font-bold hover:bg-[hsl(var(--muted))]" data-testid="button-discover-filter"><Filter size={16} /> Filters</button></div><div className="mb-8 flex gap-2 overflow-x-auto pb-1 scrollbar-hide">{categories.map((item) => <button key={item} onClick={() => setCategory(item)} className={classNames('whitespace-nowrap rounded-full px-4 py-2 text-xs font-bold transition', category === item ? 'bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]' : 'bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--border))]')} data-testid={`button-filter-${item.toLowerCase()}`}>{item}</button>)}</div>{matches.length ? <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{matches.map(({ user, match }) => <div key={user.id} className="lift rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-5" data-testid={`card-discover-${user.id}`}><div className="flex items-start justify-between"><Link href={`/profile/${user.id}`} data-testid={`link-discover-profile-${user.id}`}><Avatar user={user} size="lg" /></Link><Badge tone="green">{match.score}% match</Badge></div><Link href={`/profile/${user.id}`} className="mt-4 block" data-testid={`link-discover-name-${user.id}`}><h3 className="font-display text-xl font-bold">{user.name}</h3><p className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">{user.course} · {user.year}</p></Link><p className="mt-4 line-clamp-2 min-h-10 text-sm leading-5 text-[hsl(var(--muted-foreground))]">{user.bio}</p><div className="mt-4 flex flex-wrap gap-1.5">{match.learn.slice(0, 2).map((skill) => <Badge key={skill} tone="coral">Teaches {skill}</Badge>)}{match.teach.slice(0, 2).map((skill) => <Badge key={skill} tone="gold">Wants {skill}</Badge>)}</div><div className="mt-5 flex items-center gap-2 border-t border-[hsl(var(--border))] pt-4"><Button className="flex-1" onClick={() => request(user)}><UserPlus size={15} /> Send request</Button><Link href={`/profile/${user.id}`} className="rounded-xl p-2.5 text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))]" data-testid={`link-discover-open-${user.id}`}><ExternalLink size={16} /></Link></div></div>)}</div> : <EmptyState icon={Search} title="No close matches yet" body="Try a broader search or switch back to all categories. Your next good exchange may use different words." action={<Button variant="quiet" onClick={() => { setQuery(''); setCategory('All'); }}>Clear filters</Button>} />}</div>;
 }
@@ -419,10 +428,19 @@ function ProfilePage() {
   const { currentUser, data, updateData, notify } = useStore();
   const user = data.users.find((item) => item.id === params.id) || currentUser;
   const match = user.id !== CURRENT_USER_ID ? getMatchPercentage(currentUser, user) : null;
-  const sendRequest = () => {
+  const sendRequest = async () => {
     if (user.id === CURRENT_USER_ID) return;
-    updateData((current) => ({ ...current, requests: [...current.requests, { id: makeId('req'), senderId: CURRENT_USER_ID, receiverId: user.id, status: 'pending', message: `Hi ${user.name.split(' ')[0]} — I think we could make a good exchange.`, createdAt: new Date().toISOString() }] }));
-    notify(`Request sent to ${user.name.split(' ')[0]}.`, 'success');
+    const request = { id: makeId('req'), senderId: CURRENT_USER_ID, receiverId: user.id, status: 'pending' as const, message: `Hi ${user.name.split(' ')[0]} — I think we could make a good exchange.`, createdAt: new Date().toISOString() };
+    try {
+      const { getSupabase } = await import('./lib/supabase-client');
+      const { error } = await getSupabase().from('swap_requests').insert({ id: request.id, sender_id: request.senderId, receiver_id: request.receiverId, status: request.status, message: request.message, created_at: request.createdAt });
+      if (error) throw error;
+      updateData((current) => ({ ...current, requests: [...current.requests, request] }));
+      notify(`Request sent to ${user.name.split(' ')[0]}.`, 'success');
+    } catch (error) {
+      console.error('Failed to send exchange request:', error);
+      notify('Could not send the exchange request.', 'error');
+    }
   };
   return <div className="fade-up"><button onClick={() => setLocation('/discover')} className="mb-6 flex items-center gap-2 text-sm font-bold text-[hsl(var(--muted-foreground))]" data-testid="button-profile-back"><ArrowRight className="rotate-180" size={16} /> Back to discover</button><div className="overflow-hidden rounded-3xl border border-[hsl(var(--border))] bg-[hsl(var(--card))]"><div className="h-32 bg-[hsl(var(--primary))] sm:h-44"><div className="h-full w-full opacity-20" style={{ backgroundImage: 'radial-gradient(circle at 20% 30%, hsl(var(--secondary)) 0 2px, transparent 3px), radial-gradient(circle at 75% 60%, hsl(var(--accent)) 0 2px, transparent 3px)', backgroundSize: '35px 35px' }} /></div><div className="relative px-5 pb-7 sm:px-8"><div className="-mt-10 flex flex-col gap-4 sm:-mt-12 sm:flex-row sm:items-end sm:justify-between"><div className="flex items-end gap-4"><div className="rounded-3xl border-4 border-[hsl(var(--card))]"><Avatar user={user} size="lg" /></div><div className="pb-1"><h1 className="font-display text-2xl font-extrabold">{user.name}</h1><p className="text-sm text-[hsl(var(--muted-foreground))]">{user.course} · {user.year} · {user.college}</p></div></div>{user.id !== CURRENT_USER_ID ? <Button onClick={sendRequest}><UserPlus size={16} /> Send exchange request</Button> : <Button variant="outline" onClick={() => setLocation('/settings')}><Pencil size={15} /> Edit profile</Button>}</div><p className="mt-7 max-w-2xl text-sm leading-7 text-[hsl(var(--muted-foreground))]">{user.bio}</p><div className="mt-6 flex flex-wrap items-center gap-3 text-xs"><Badge tone="gold"><Star size={12} className="mr-1 fill-current" /> {user.rating} rating</Badge><Badge>{user.availability}</Badge>{match && <Badge tone="green">{match.score}% compatible</Badge>}</div></div></div><div className="mt-6 grid gap-5 lg:grid-cols-2"><div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-6"><div className="flex items-center justify-between"><h2 className="font-display text-xl font-bold">Can teach</h2><Badge tone="coral">{user.skillsToTeach.length} skills</Badge></div><div className="mt-5 space-y-3">{user.skillsToTeach.map((skill) => <div key={skill} className="flex items-center gap-3 rounded-xl bg-[hsl(var(--muted)/.65)] p-3"><div className="rounded-lg bg-[hsl(var(--primary)/.12)] p-2 text-[hsl(var(--primary))]"><BookOpen size={16} /></div><span className="text-sm font-bold">{skill}</span></div>)}</div></div><div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-6"><div className="flex items-center justify-between"><h2 className="font-display text-xl font-bold">Wants to learn</h2><Badge tone="gold">{user.skillsToLearn.length} skills</Badge></div><div className="mt-5 space-y-3">{user.skillsToLearn.map((skill) => <div key={skill} className="flex items-center gap-3 rounded-xl bg-[hsl(var(--muted)/.65)] p-3"><div className="rounded-lg bg-[hsl(var(--secondary)/.75)] p-2"><GraduationCap size={16} /></div><span className="text-sm font-bold">{skill}</span></div>)}</div></div></div></div>;
 }
@@ -548,27 +566,30 @@ function RequestsPage() {
   const [tab, setTab] = useState<'received' | 'sent' | 'accepted' | 'completed'>('received');
   const shown = data.requests.filter((request) => tab === 'received' ? request.receiverId === CURRENT_USER_ID && request.status === 'pending' : tab === 'sent' ? request.senderId === CURRENT_USER_ID && request.status === 'pending' : request.status === tab && (request.senderId === CURRENT_USER_ID || request.receiverId === CURRENT_USER_ID));
   const person = (request: AppData['requests'][number]) => data.users.find((user) => user.id === (request.senderId === CURRENT_USER_ID ? request.receiverId : request.senderId));
-  const changeStatus = (id: string, status: RequestStatus) => {
-    updateData((current) => ({
-      ...current,
-      requests: current.requests.map((item) =>
-        item.id === id ? { ...item, status } : item
-      ),
-    }));
-
-    notify(
-      status === 'accepted'
-        ? 'Request accepted. Your conversation is ready.'
-        : `Request ${status}.`,
-      status === 'rejected' ? 'info' : 'success'
-    );
+  const changeStatus = async (id: string, status: RequestStatus) => {
+    try {
+      const { getSupabase } = await import('./lib/supabase-client');
+      const { error } = await getSupabase().from('swap_requests').update({ status, updated_at: new Date().toISOString() }).eq('id', id);
+      if (error) throw error;
+      updateData((current) => ({ ...current, requests: current.requests.map((item) => item.id === id ? { ...item, status } : item) }));
+      notify(status === 'accepted' ? 'Request accepted. Your conversation is ready.' : `Request ${status}.`, status === 'rejected' ? 'info' : 'success');
+    } catch (error) {
+      console.error('Failed to update exchange request:', error);
+      notify('Could not update the exchange request.', 'error');
+    }
   };
   return <div className="fade-up"><PageTitle eyebrow="Your exchange inbox" title="Requests, without the awkwardness." body="A clear yes, no, or not yet. Keep the good energy moving." /><div className="mb-7 flex gap-1 overflow-x-auto border-b border-[hsl(var(--border))] scrollbar-hide">{(['received', 'sent', 'accepted', 'completed'] as const).map((item) => <button key={item} onClick={() => setTab(item)} className={classNames('whitespace-nowrap border-b-2 px-4 pb-3 text-sm font-bold capitalize', tab === item ? 'border-[hsl(var(--primary))] text-[hsl(var(--primary))]' : 'border-transparent text-[hsl(var(--muted-foreground))]')} data-testid={`button-requests-${item}`}>{item} {item === 'received' && <span className="ml-1 rounded-full bg-[hsl(var(--accent)/.14)] px-1.5 py-0.5 text-[10px]">{data.requests.filter((r) => r.receiverId === CURRENT_USER_ID && r.status === 'pending').length}</span>}</button>)}</div>{shown.length ? <div className="space-y-3">{shown.map((request) => { const user = person(request); if (!user) return null; return <div key={request.id} className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-5" data-testid={`row-request-${request.id}`}><div className="flex flex-col gap-4 sm:flex-row sm:items-start"><Avatar user={user} /><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><Link href={`/profile/${user.id}`} className="font-display text-lg font-bold" data-testid={`link-request-user-${request.id}`}>{user.name}</Link><Badge tone={request.status === 'accepted' ? 'green' : request.status === 'completed' ? 'gold' : request.status === 'rejected' ? 'coral' : 'default'}>{request.status}</Badge></div><p className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">{user.course} · {user.college} · {formatRelative(request.createdAt)}</p><p className="mt-4 rounded-xl bg-[hsl(var(--muted)/.7)] p-3 text-sm leading-6">{request.message}</p></div>{tab === 'received' && <div className="flex gap-2 sm:flex-col"><Button onClick={() => changeStatus(request.id, 'accepted')} className="flex-1 sm:flex-none"><Check size={15} /> Accept</Button><Button variant="outline" onClick={() => changeStatus(request.id, 'rejected')} className="flex-1 sm:flex-none"><X size={15} /> Pass</Button></div>}</div></div> })}</div> : <EmptyState icon={Inbox} title={`No ${tab} requests`} body={tab === 'received' ? 'When someone sees a good exchange, it will land here.' : 'Your exchange history will take shape as you meet people.'} action={tab !== 'received' ? <Link href="/discover" className="text-sm font-bold text-[hsl(var(--primary))]" data-testid="link-requests-discover">Discover people <ArrowRight size={14} className="inline" /></Link> : undefined} />}</div>;
 }
 
 function MessagesPage() {
   const { currentUser, data, updateData, notify } = useStore();
-  const conversations = useMemo(() => Array.from(new Set(data.messages.map((message) => message.conversationId))).map((id) => { const messages = data.messages.filter((message) => message.conversationId === id); const otherFromMessages = messages.find((message) => message.senderId !== CURRENT_USER_ID)?.senderId; const acceptedRequest = data.requests.find((request) => request.status === 'accepted' && (request.senderId === CURRENT_USER_ID || request.receiverId === CURRENT_USER_ID)); const otherId = otherFromMessages || (acceptedRequest ? (acceptedRequest.senderId === CURRENT_USER_ID ? acceptedRequest.receiverId : acceptedRequest.senderId) : undefined); return { id, messages, user: data.users.find((user) => user.id === otherId) }; }).filter((item) => item.user), [data.messages, data.users]);
+  const conversations = useMemo(() => Array.from(new Set(data.messages.map((message) => message.conversationId))).map((id) => {
+    const messages = data.messages.filter((message) => message.conversationId === id);
+    const otherFromMessages = messages.find((message) => message.senderId !== CURRENT_USER_ID)?.senderId;
+    const acceptedRequest = data.requests.find((request) => request.status === 'accepted' && (request.senderId === CURRENT_USER_ID || request.receiverId === CURRENT_USER_ID));
+    const otherId = otherFromMessages || (acceptedRequest ? (acceptedRequest.senderId === CURRENT_USER_ID ? acceptedRequest.receiverId : acceptedRequest.senderId) : undefined);
+    return { id, messages, user: data.users.find((user) => user.id === otherId) };
+  }).filter((item) => item.user), [data.messages, data.users, data.requests]);
   const [selected, setSelected] = useState(conversations[0]?.id || '');
   const [body, setBody] = useState('');
   const active = conversations.find((conversation) => conversation.id === selected) || conversations[0];
