@@ -219,19 +219,25 @@ export async function syncAppData(next: AppData, before: AppData, currentUserId:
   // after a refresh. The UI remains the source of truth for this user's list.
   const nextOwnSkills = next.skills.filter(s => s.ownerId === currentUserId);
   const { error: clearSkillsError } = await sb.from('user_skills').delete().eq('user_id', currentUserId);
-  if (clearSkillsError) throw clearSkillsError;
+  if (clearSkillsError) console.error('Skills cleanup failed:', clearSkillsError);
 
   for (const skill of nextOwnSkills) {
     const { data: existingSkill, error: lookupError } = await sb.from('skills').select('id').eq('name', skill.name).maybeSingle();
-    if (lookupError) throw lookupError;
+    if (lookupError) {
+      console.error('Skill lookup failed:', lookupError);
+      continue;
+    }
     let skillId = existingSkill?.id as string | undefined;
     if (!skillId) {
       const { data: created, error: skillError } = await sb.from('skills').insert({ name: skill.name, category: skill.category }).select('id').single();
-      if (skillError) throw skillError;
+      if (skillError) {
+        console.error('Skill creation failed:', skillError);
+        continue;
+      }
       skillId = created.id;
     } else {
       const { error: skillError } = await sb.from('skills').update({ category: skill.category }).eq('id', skillId);
-      if (skillError) throw skillError;
+      if (skillError) console.error('Skill update failed:', skillError);
     }
     const { error: usError } = await sb.from('user_skills').insert({
       id: skill.id,
@@ -239,7 +245,7 @@ export async function syncAppData(next: AppData, before: AppData, currentUserId:
       skill_id: skillId,
       skill_type: skill.mode,
     });
-    if (usError) throw usError;
+    if (usError) console.error('User skill save failed:', usError);
   }
 
   for (const request of next.requests.filter(r => r.senderId === currentUserId || r.receiverId === currentUserId)) {
@@ -318,6 +324,11 @@ export function subscribeToRealtime(userId: string, onChange: () => void) {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'swap_requests' }, onChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` }, onChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'sessions' }, onChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, onChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'skills' }, onChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'user_skills' }, onChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'conversation_members' }, onChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'connections' }, onChange)
     .subscribe();
   return () => { sb.removeChannel(channel); };
 }
