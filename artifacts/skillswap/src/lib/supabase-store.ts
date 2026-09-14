@@ -44,23 +44,52 @@ export async function signIn(email: string, password: string) {
 
 export async function signUp(name: string, email: string, password: string) {
   const sb = getSupabase();
+
   const { data, error } = await sb.auth.signUp({
     email,
     password,
-    options: { data: { full_name: name } },
+    options: {
+      data: { full_name: name },
+    },
   });
+
   if (error) throw error;
 
-  // SkillSwap uses direct email/password access. If the Supabase project still
-  // has email confirmation enabled, signUp returns no session. Try an immediate
-  // login so the app can continue when confirmation is disabled.
-  if (data.session) return data.session;
+  let session = data.session;
 
-  const { data: loginData, error: loginError } = await sb.auth.signInWithPassword({ email, password });
-  if (loginError) {
-    throw new Error('Direct signup is enabled in the app, but Supabase is still requiring email confirmation. Turn off Confirm email in Supabase Authentication settings and try again.');
+  if (!session) {
+    const { data: loginData, error: loginError } =
+      await sb.auth.signInWithPassword({ email, password });
+
+    if (loginError) {
+      throw new Error(
+        'Direct signup is enabled in the app, but Supabase is still requiring email confirmation.'
+      );
+    }
+
+    session = loginData.session;
   }
-  return loginData.session;
+
+  if (!session) {
+    throw new Error('Could not create the SkillSwap account.');
+  }
+
+  const userId = session.user.id;
+
+  const { error: profileError } = await sb
+    .from('profiles')
+    .upsert(
+      {
+        id: userId,
+        full_name: name,
+        email,
+      },
+      { onConflict: 'id' }
+    );
+
+  if (profileError) throw profileError;
+
+  return session;
 }
 
 export async function signOut() {
@@ -169,11 +198,19 @@ export async function syncAppData(next: AppData, before: AppData, currentUserId:
 
   const me = next.users.find(u => u.id === currentUserId);
   if (me) {
-    const { error } = await sb.from('profiles').update({
-      full_name: me.name, bio: me.bio, avatar_url: me.profileImage || null,
-      college: me.college, course: me.course, year: me.year, rating: me.rating, availability: me.availability,
+    const { error } = await sb.from('profiles').upsert({
+      id: currentUserId,
+      full_name: me.name,
+      email: me.email,
+      bio: me.bio,
+      avatar_url: me.profileImage || null,
+      college: me.college,
+      course: me.course,
+      year: me.year,
+      rating: me.rating,
+      availability: me.availability,
       updated_at: new Date().toISOString(),
-    }).eq('id', currentUserId);
+    }, { onConflict: 'id' });
     if (error) throw error;
   }
 
