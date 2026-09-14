@@ -568,7 +568,7 @@ function RequestsPage() {
 
 function MessagesPage() {
   const { currentUser, data, updateData, notify } = useStore();
-  const conversations = useMemo(() => Array.from(new Set(data.messages.map((message) => message.conversationId))).map((id) => { const messages = data.messages.filter((message) => message.conversationId === id); const otherId = messages.find((message) => message.senderId !== CURRENT_USER_ID)?.senderId || 'priya'; return { id, messages, user: data.users.find((user) => user.id === otherId) }; }).filter((item) => item.user), [data.messages, data.users]);
+  const conversations = useMemo(() => Array.from(new Set(data.messages.map((message) => message.conversationId))).map((id) => { const messages = data.messages.filter((message) => message.conversationId === id); const otherFromMessages = messages.find((message) => message.senderId !== CURRENT_USER_ID)?.senderId; const acceptedRequest = data.requests.find((request) => request.status === 'accepted' && (request.senderId === CURRENT_USER_ID || request.receiverId === CURRENT_USER_ID)); const otherId = otherFromMessages || (acceptedRequest ? (acceptedRequest.senderId === CURRENT_USER_ID ? acceptedRequest.receiverId : acceptedRequest.senderId) : undefined); return { id, messages, user: data.users.find((user) => user.id === otherId) }; }).filter((item) => item.user), [data.messages, data.users]);
   const [selected, setSelected] = useState(conversations[0]?.id || '');
   const [body, setBody] = useState('');
   const active = conversations.find((conversation) => conversation.id === selected) || conversations[0];
