@@ -68,6 +68,7 @@ import {
   signUp,
   subscribeToRealtime,
   syncAppData,
+  acceptRequestExtras,
 } from '@/lib/supabase-store';
 import type { User } from '@/lib/skillswap-data';
 
@@ -550,8 +551,19 @@ function RequestsPage() {
   const person = (request: AppData['requests'][number]) => data.users.find((user) => user.id === (request.senderId === CURRENT_USER_ID ? request.receiverId : request.senderId));
   const changeStatus = async (id: string, status: RequestStatus) => {
     const request = data.requests.find((item) => item.id === id);
-    updateData((current) => ({ ...current, requests: current.requests.map((item) => item.id === id ? { ...item, status } : item) }));
-    notify(status === 'accepted' ? 'Request accepted. Time to make it real.' : `Request ${status}.`, status === 'rejected' ? 'info' : 'success');
+    if (!request) return;
+
+    try {
+      if (status === 'accepted') {
+        await acceptRequestExtras(request, currentUser.name);
+      }
+
+      updateData((current) => ({ ...current, requests: current.requests.map((item) => item.id === id ? { ...item, status } : item) }));
+      notify(status === 'accepted' ? 'Request accepted. Your conversation is ready.' : `Request ${status}.`, status === 'rejected' ? 'info' : 'success');
+    } catch (error) {
+      console.error('Request status update failed', error);
+      notify(error instanceof Error ? error.message : 'Could not update the request. Please try again.', 'error');
+    }
   };
   return <div className="fade-up"><PageTitle eyebrow="Your exchange inbox" title="Requests, without the awkwardness." body="A clear yes, no, or not yet. Keep the good energy moving." /><div className="mb-7 flex gap-1 overflow-x-auto border-b border-[hsl(var(--border))] scrollbar-hide">{(['received', 'sent', 'accepted', 'completed'] as const).map((item) => <button key={item} onClick={() => setTab(item)} className={classNames('whitespace-nowrap border-b-2 px-4 pb-3 text-sm font-bold capitalize', tab === item ? 'border-[hsl(var(--primary))] text-[hsl(var(--primary))]' : 'border-transparent text-[hsl(var(--muted-foreground))]')} data-testid={`button-requests-${item}`}>{item} {item === 'received' && <span className="ml-1 rounded-full bg-[hsl(var(--accent)/.14)] px-1.5 py-0.5 text-[10px]">{data.requests.filter((r) => r.receiverId === CURRENT_USER_ID && r.status === 'pending').length}</span>}</button>)}</div>{shown.length ? <div className="space-y-3">{shown.map((request) => { const user = person(request); if (!user) return null; return <div key={request.id} className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-5" data-testid={`row-request-${request.id}`}><div className="flex flex-col gap-4 sm:flex-row sm:items-start"><Avatar user={user} /><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><Link href={`/profile/${user.id}`} className="font-display text-lg font-bold" data-testid={`link-request-user-${request.id}`}>{user.name}</Link><Badge tone={request.status === 'accepted' ? 'green' : request.status === 'completed' ? 'gold' : request.status === 'rejected' ? 'coral' : 'default'}>{request.status}</Badge></div><p className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">{user.course} · {user.college} · {formatRelative(request.createdAt)}</p><p className="mt-4 rounded-xl bg-[hsl(var(--muted)/.7)] p-3 text-sm leading-6">{request.message}</p></div>{tab === 'received' && <div className="flex gap-2 sm:flex-col"><Button onClick={() => changeStatus(request.id, 'accepted')} className="flex-1 sm:flex-none"><Check size={15} /> Accept</Button><Button variant="outline" onClick={() => changeStatus(request.id, 'rejected')} className="flex-1 sm:flex-none"><X size={15} /> Pass</Button></div>}</div></div> })}</div> : <EmptyState icon={Inbox} title={`No ${tab} requests`} body={tab === 'received' ? 'When someone sees a good exchange, it will land here.' : 'Your exchange history will take shape as you meet people.'} action={tab !== 'received' ? <Link href="/discover" className="text-sm font-bold text-[hsl(var(--primary))]" data-testid="link-requests-discover">Discover people <ArrowRight size={14} className="inline" /></Link> : undefined} />}</div>;
 }
