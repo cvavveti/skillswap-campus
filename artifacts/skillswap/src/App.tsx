@@ -76,6 +76,7 @@ type Toast = { message: string; kind: ToastKind } | null;
 type Store = {
   data: AppData;
   updateData: (updater: AppData | ((current: AppData) => AppData)) => void;
+  setLocalData: (updater: AppData | ((current: AppData) => AppData)) => void;
   currentUser: User;
   notify: (message: string, kind?: ToastKind) => void;
   authenticated: boolean;
@@ -386,7 +387,7 @@ function SessionMini({ session }: { session: AppData['sessions'][number] }) {
 }
 
 function DiscoverPage() {
-  const { currentUser, data, updateData, notify } = useStore();
+  const { currentUser, data, setLocalData, notify } = useStore();
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('All');
 
@@ -412,13 +413,13 @@ function DiscoverPage() {
 
         if (skillError) throw skillError;
 
-        const skillMap = new Map(
-          (skillRows || []).map((skill) => [skill.id, skill])
+        const skillMap = new Map<string, { id: string; name: string; category?: string | null }>(
+          (skillRows || []).map((skill: { id: string; name: string; category?: string | null }) => [skill.id, skill])
         );
 
-        updateData((current) => ({
+        setLocalData((current) => ({
           ...current,
-          skills: (memberships || []).map((item) => {
+          skills: (memberships || []).map((item: { user_id: string; skill_id: string; skill_type: 'teach' | 'learn' }) => {
             const skill = skillMap.get(item.skill_id);
             if (!skill) return null;
 
@@ -471,7 +472,7 @@ function DiscoverPage() {
       const { getSupabase } = await import('./lib/supabase-client');
       const { error } = await getSupabase().from('swap_requests').insert({ id: request.id, sender_id: request.senderId, receiver_id: request.receiverId, status: request.status, message: request.message, created_at: request.createdAt });
       if (error) throw error;
-      updateData((current) => ({ ...current, requests: [...current.requests, request] }));
+      setLocalData((current) => ({ ...current, requests: [...current.requests, request] }));
       notify(`Request sent to ${user.name.split(' ')[0]}.`, 'success');
     } catch (error) {
       console.error('Failed to send exchange request:', error);
@@ -484,7 +485,7 @@ function DiscoverPage() {
 function ProfilePage() {
   const params = useParams();
   const [, setLocation] = useLocation();
-  const { currentUser, data, updateData, notify } = useStore();
+  const { currentUser, data, setLocalData, notify } = useStore();
   const user = data.users.find((item) => item.id === params.id) || currentUser;
   const match = user.id !== CURRENT_USER_ID ? getMatchPercentage(currentUser, user) : null;
   const sendRequest = async () => {
@@ -494,7 +495,7 @@ function ProfilePage() {
       const { getSupabase } = await import('./lib/supabase-client');
       const { error } = await getSupabase().from('swap_requests').insert({ id: request.id, sender_id: request.senderId, receiver_id: request.receiverId, status: request.status, message: request.message, created_at: request.createdAt });
       if (error) throw error;
-      updateData((current) => ({ ...current, requests: [...current.requests, request] }));
+      setLocalData((current) => ({ ...current, requests: [...current.requests, request] }));
       notify(`Request sent to ${user.name.split(' ')[0]}.`, 'success');
     } catch (error) {
       console.error('Failed to send exchange request:', error);
@@ -505,7 +506,7 @@ function ProfilePage() {
 }
 
 function SkillsPage() {
-  const { currentUser, data, updateData, notify } = useStore();
+  const { currentUser, data, setLocalData, notify } = useStore();
   const [mode, setMode] = useState<'teach' | 'learn'>('teach');
   const [editing, setEditing] = useState<Skill | null>(null);
   const [formOpen, setFormOpen] = useState(false);
@@ -538,7 +539,7 @@ function SkillsPage() {
 
         if (skillError) throw skillError;
 
-        updateData((current) => ({
+        setLocalData((current) => ({
           ...current,
           skills: current.skills.map((skill) =>
             skill.id === editing.id
@@ -612,7 +613,7 @@ function SkillsPage() {
         if (membershipInsertError) throw membershipInsertError;
       }
 
-      updateData((current) => ({
+      setLocalData((current) => ({
         ...current,
         skills: [
           ...current.skills.filter(
@@ -648,7 +649,7 @@ function SkillsPage() {
 
       if (error) throw error;
 
-      updateData((current) => ({
+      setLocalData((current) => ({
         ...current,
         skills: current.skills.filter((item) => item.id !== id),
       }));
@@ -758,7 +759,7 @@ function NotesPage() {
 }
 
 function RequestsPage() {
-  const { currentUser, data, updateData, notify } = useStore();
+  const { currentUser, data, setLocalData, notify } = useStore();
   const [tab, setTab] = useState<'received' | 'sent' | 'accepted' | 'completed'>('received');
   const shown = data.requests.filter((request) => tab === 'received' ? request.receiverId === CURRENT_USER_ID && request.status === 'pending' : tab === 'sent' ? request.senderId === CURRENT_USER_ID && request.status === 'pending' : request.status === tab && (request.senderId === CURRENT_USER_ID || request.receiverId === CURRENT_USER_ID));
   const person = (request: AppData['requests'][number]) => data.users.find((user) => user.id === (request.senderId === CURRENT_USER_ID ? request.receiverId : request.senderId));
@@ -767,7 +768,7 @@ function RequestsPage() {
       const { getSupabase } = await import('./lib/supabase-client');
       const { error } = await getSupabase().from('swap_requests').update({ status, updated_at: new Date().toISOString() }).eq('id', id);
       if (error) throw error;
-      updateData((current) => ({ ...current, requests: current.requests.map((item) => item.id === id ? { ...item, status } : item) }));
+      setLocalData((current) => ({ ...current, requests: current.requests.map((item) => item.id === id ? { ...item, status } : item) }));
       notify(status === 'accepted' ? 'Request accepted. Your conversation is ready.' : `Request ${status}.`, status === 'rejected' ? 'info' : 'success');
     } catch (error) {
       console.error('Failed to update exchange request:', error);
@@ -778,7 +779,7 @@ function RequestsPage() {
 }
 
 function MessagesPage() {
-  const { currentUser, data, updateData, notify } = useStore();
+  const { currentUser, data, updateData, setLocalData, notify } = useStore();
   const conversations = useMemo(() => Array.from(new Set(data.messages.map((message) => message.conversationId))).map((id) => {
     const messages = data.messages.filter((message) => message.conversationId === id);
     const otherFromMessages = messages.find((message) => message.senderId !== CURRENT_USER_ID)?.senderId;
@@ -790,25 +791,116 @@ function MessagesPage() {
   const [body, setBody] = useState('');
   const active = conversations.find((conversation) => conversation.id === selected) || conversations[0];
   useEffect(() => { if (!selected && conversations[0]) setSelected(conversations[0].id); }, [conversations, selected]);
-  const send = (event: React.FormEvent) => { event.preventDefault(); if (!body.trim() || !active) return; updateData((current) => ({ ...current, messages: [...current.messages, { id: makeId('msg'), conversationId: active.id, senderId: CURRENT_USER_ID, body: body.trim(), createdAt: new Date().toISOString() }] })); setBody(''); notify('Message sent.', 'success'); };
+  const send = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!body.trim() || !active) return;
+    const message = { id: makeId('msg'), conversationId: active.id, senderId: CURRENT_USER_ID, body: body.trim(), createdAt: new Date().toISOString() };
+    try {
+      const { getSupabase } = await import('./lib/supabase-client');
+      const { error } = await getSupabase().from('messages').insert({
+        id: message.id,
+        conversation_id: message.conversationId,
+        sender_id: message.senderId,
+        content: message.body,
+        created_at: message.createdAt,
+      });
+      if (error) throw error;
+      setLocalData((current) => ({ ...current, messages: [...current.messages, message] }));
+      setBody('');
+      notify('Message sent.', 'success');
+    } catch (error) {
+      console.error('Failed to send message:', error);
+      notify('Could not send the message.', 'error');
+    }
+  };
   return <div className="fade-up"><PageTitle eyebrow="The good part of networking" title="Messages." body="Keep the conversation human, specific, and easy to pick back up." action={<Link href="/discover" className="inline-flex h-10 items-center gap-2 rounded-xl bg-[hsl(var(--primary))] px-4 text-sm font-bold text-[hsl(var(--primary-foreground))]" data-testid="link-messages-find"><UserPlus size={15} /> New conversation</Link>} /><div className="grid min-h-[560px] overflow-hidden rounded-3xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] md:grid-cols-[260px_1fr]">{conversations.length ? <><div className="border-b border-[hsl(var(--border))] md:border-b-0 md:border-r"><div className="border-b border-[hsl(var(--border))] p-4"><div className="relative"><Search size={15} className="absolute left-3 top-3 text-[hsl(var(--muted-foreground))]" /><input placeholder="Search messages" className="h-9 w-full rounded-lg bg-[hsl(var(--muted))] pl-9 pr-3 text-xs outline-none" data-testid="input-message-search" /></div></div><div className="flex overflow-x-auto p-2 md:block">{conversations.map((conversation) => <button key={conversation.id} onClick={() => setSelected(conversation.id)} className={classNames('flex min-w-[170px] items-center gap-2 rounded-xl p-3 text-left hover:bg-[hsl(var(--muted))] md:w-full', active?.id === conversation.id && 'bg-[hsl(var(--muted))]')} data-testid={`button-conversation-${conversation.id}`}><Avatar user={conversation.user} size="sm" /><div className="min-w-0"><p className="truncate text-sm font-bold">{conversation.user?.name}</p><p className="truncate text-[11px] text-[hsl(var(--muted-foreground))]">{conversation.messages.at(-1)?.body}</p></div></button>)}</div></div>{active && <div className="flex min-h-[430px] flex-col"><div className="flex items-center gap-3 border-b border-[hsl(var(--border))] p-4"><Avatar user={active.user} size="sm" /><div><p className="text-sm font-bold">{active.user?.name}</p><p className="text-xs text-[hsl(var(--muted-foreground))]">Available {active.user?.availability.toLowerCase()}</p></div><Link href={`/profile/${active.user?.id}`} className="ml-auto rounded-lg p-2 text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))]" data-testid="link-message-profile"><ExternalLink size={16} /></Link></div><div className="flex-1 space-y-3 overflow-y-auto p-5">{active.messages.map((message) => <div key={message.id} className={classNames('flex', message.senderId === CURRENT_USER_ID ? 'justify-end' : 'justify-start')}><div className={classNames('max-w-[78%] rounded-2xl px-4 py-3 text-sm leading-6', message.senderId === CURRENT_USER_ID ? 'rounded-br-sm bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]' : 'rounded-bl-sm bg-[hsl(var(--muted))]')}><p>{message.body}</p><p className={classNames('mt-1 text-[10px]', message.senderId === CURRENT_USER_ID ? 'opacity-60' : 'text-[hsl(var(--muted-foreground))]')}>{formatRelative(message.createdAt)}</p></div></div>)}</div><form onSubmit={send} className="flex gap-2 border-t border-[hsl(var(--border))] p-4"><input value={body} onChange={(e) => setBody(e.target.value)} placeholder={`Write to ${active.user?.name.split(' ')[0]}…`} className="h-11 min-w-0 flex-1 rounded-xl bg-[hsl(var(--muted))] px-4 text-sm outline-none focus:ring-2 focus:ring-[hsl(var(--primary)/.2)]" data-testid="input-message-body" /><Button type="submit" className="h-11 w-11 px-0" aria-label="Send message"><Send size={16} /></Button></form></div>}</> : <div className="col-span-full p-5"><EmptyState icon={MessageCircle} title="No conversations yet" body="Find a partner whose skills complement yours, then start with one specific question." action={<Link href="/discover" className="text-sm font-bold text-[hsl(var(--primary))]" data-testid="link-empty-messages">Find a partner</Link>} /></div>}</div></div>;
 }
 
 function SessionsPage() {
-  const { data, updateData, notify } = useStore();
+  const { currentUser, data, setLocalData, notify } = useStore();
   const [showForm, setShowForm] = useState(false);
-  const [skill, setSkill] = useState('React');
-  const [partnerId, setPartnerId] = useState('priya');
+  const [skill, setSkill] = useState('');
+  const [partnerId, setPartnerId] = useState('');
   const [date, setDate] = useState('');
   const [time, setTime] = useState('18:30');
   const [meetingUrl, setMeetingUrl] = useState('');
   const [tab, setTab] = useState<'upcoming' | 'completed'>('upcoming');
+  const partners = data.users.filter((user) => user.id !== CURRENT_USER_ID);
   const sessions = data.sessions.filter((session) => session.userId === CURRENT_USER_ID && session.status === tab);
-  const schedule = (event: React.FormEvent) => { event.preventDefault(); if (!date) { notify('Choose a date for your session.', 'error'); return; } if (!meetingUrl.trim()) { notify('Add the meeting link for your session.', 'error'); return; } updateData((current) => ({ ...current, sessions: [...current.sessions, { id: makeId('session'), userId: CURRENT_USER_ID, partnerId, skill, date, time, duration: '45 min', type: 'Video call', status: 'upcoming', meetingUrl: meetingUrl.trim() }] })); setShowForm(false); setMeetingUrl(''); notify('Session scheduled.', 'success'); };
-  const change = (id: string, status: 'cancelled' | 'completed') => { updateData((current) => ({ ...current, sessions: current.sessions.map((session) => session.id === id ? { ...session, status } : session) })); notify(status === 'cancelled' ? 'Session cancelled.' : 'Session marked complete.', 'info'); };
-  const reschedule = (id: string) => { updateData((current) => ({ ...current, sessions: current.sessions.map((session) => { if (session.id !== id) return session; const next = new Date(`${session.date}T12:00:00`); next.setDate(next.getDate() + 1); return { ...session, date: next.toISOString().slice(0, 10) }; }) })); notify('Session moved one day later.', 'success'); };
-  return <div className="fade-up"><PageTitle eyebrow="Make the swap real" title="Sessions." body="A good exchange has a time, a little intention, and somewhere to begin." action={<Button onClick={() => setShowForm(true)}><Plus size={16} /> Schedule session</Button>} /><div className="mb-7 flex gap-1 rounded-xl bg-[hsl(var(--muted))] p-1 sm:w-fit"><button onClick={() => setTab('upcoming')} className={classNames('rounded-lg px-5 py-2.5 text-sm font-bold', tab === 'upcoming' && 'bg-[hsl(var(--card))] shadow-sm')} data-testid="button-sessions-upcoming">Upcoming <span className="ml-1 text-xs text-[hsl(var(--muted-foreground))]">{data.sessions.filter((s) => s.status === 'upcoming').length}</span></button><button onClick={() => setTab('completed')} className={classNames('rounded-lg px-5 py-2.5 text-sm font-bold', tab === 'completed' && 'bg-[hsl(var(--card))] shadow-sm')} data-testid="button-sessions-completed">Completed</button></div>{showForm && <form onSubmit={schedule} className="mb-7 grid gap-4 rounded-2xl border border-[hsl(var(--primary)/.35)] bg-[hsl(var(--card))] p-5 sm:grid-cols-2 lg:grid-cols-4"><label><span className="mb-1.5 block text-xs font-bold">Partner</span><select value={partnerId} onChange={(e) => setPartnerId(e.target.value)} className="h-11 w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-3 text-sm" data-testid="select-session-partner">{data.users.filter((user) => user.id !== CURRENT_USER_ID).map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select></label><label><span className="mb-1.5 block text-xs font-bold">Skill focus</span><input value={skill} onChange={(e) => setSkill(e.target.value)} className="h-11 w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-3 text-sm" data-testid="input-session-skill" /></label><label><span className="mb-1.5 block text-xs font-bold">Date</span><input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="h-11 w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-3 text-sm" data-testid="input-session-date" /></label><label><span className="mb-1.5 block text-xs font-bold">Time</span><input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="h-11 w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-3 text-sm" data-testid="input-session-time" /></label><label><span className="mb-1.5 block text-xs font-bold">Meeting link</span><input type="url" value={meetingUrl} onChange={(e) => setMeetingUrl(e.target.value)} placeholder="https://meet.google.com/..." className="h-11 w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-3 text-sm" data-testid="input-session-meeting-url" /></label><div className="flex gap-2 sm:col-span-2 lg:col-span-4 lg:justify-end"><Button variant="quiet" onClick={() => setShowForm(false)}>Cancel</Button><Button type="submit">Save session</Button></div></form>}{sessions.length ? <div className="space-y-3">{sessions.map((session) => { const user = data.users.find((item) => item.id === session.partnerId); return <div key={session.id} className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-5" data-testid={`card-session-detail-${session.id}`}><div className="flex flex-col gap-5 sm:flex-row sm:items-center"><div className="flex items-center gap-3 sm:w-[38%]"><Avatar user={user} /><div><p className="font-display text-lg font-bold">{session.skill}</p><p className="text-xs text-[hsl(var(--muted-foreground))]">with {user?.name}</p></div></div><div className="grid flex-1 grid-cols-2 gap-3 text-sm sm:grid-cols-3"><div><p className="text-[10px] font-bold uppercase tracking-wider text-[hsl(var(--muted-foreground))]">When</p><p className="mt-1 font-bold">{formatDate(session.date)} · {session.time}</p></div><div><p className="text-[10px] font-bold uppercase tracking-wider text-[hsl(var(--muted-foreground))]">Format</p><p className="mt-1 flex items-center gap-1.5 font-bold"><Video size={14} className="text-[hsl(var(--primary))]" />{session.type}</p></div><div><p className="text-[10px] font-bold uppercase tracking-wider text-[hsl(var(--muted-foreground))]">Length</p><p className="mt-1 font-bold">{session.duration}</p></div></div>{tab === 'upcoming' ? <div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => session.meetingUrl ? window.open(session.meetingUrl, '_blank', 'noopener,noreferrer') : notify('This session has no meeting link.', 'error')}><Video size={15} /> Join</Button><Button variant="outline" onClick={() => reschedule(session.id)} className="px-3" aria-label="Reschedule session"><CalendarDays size={15} /><span className="hidden lg:inline">Move</span></Button><button onClick={() => change(session.id, 'cancelled')} className="rounded-xl p-2.5 text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--accent)/.1)] hover:text-[hsl(var(--destructive))]" aria-label="Cancel session" data-testid={`button-cancel-session-${session.id}`}><XCircle size={17} /></button></div> : <Badge tone="green"><CheckCircle2 size={13} className="mr-1" /> Finished</Badge>}</div></div> })}</div> : <EmptyState icon={CalendarDays} title={tab === 'upcoming' ? 'Your calendar is open' : 'No completed sessions yet'} body={tab === 'upcoming' ? 'Schedule a focused conversation with someone who complements your skills.' : 'After your first exchange, it will show up here.'} action={tab === 'upcoming' ? <Button onClick={() => setShowForm(true)}><Plus size={15} /> Schedule one</Button> : undefined} />}</div>;
+
+  useEffect(() => {
+    if (!partnerId && partners[0]) setPartnerId(partners[0].id);
+    if (!skill) setSkill(currentUser.skillsToTeach[0] || currentUser.skillsToLearn[0] || '');
+  }, [partners, partnerId, skill, currentUser.skillsToTeach, currentUser.skillsToLearn]);
+
+  const schedule = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!partnerId) { notify('Choose a partner first.', 'error'); return; }
+    if (!date) { notify('Choose a date for your session.', 'error'); return; }
+    if (!skill.trim()) { notify('Add a skill focus.', 'error'); return; }
+    if (!meetingUrl.trim()) { notify('Add the meeting link for your session.', 'error'); return; }
+    const sessionId = makeId('session');
+    const scheduledAt = new Date(`${date}T${time || '18:30'}:00`).toISOString();
+    const session: AppData['sessions'][number] = { id: sessionId, userId: CURRENT_USER_ID, partnerId, skill: skill.trim(), date, time: time || '18:30', duration: '45 min', type: 'Video call', status: 'upcoming', meetingUrl: meetingUrl.trim() };
+    try {
+      const { getSupabase } = await import('./lib/supabase-client');
+      const { error } = await getSupabase().from('sessions').insert({
+        id: sessionId,
+        host_id: CURRENT_USER_ID,
+        participant_id: partnerId,
+        title: session.skill,
+        description: `SkillSwap session with ${data.users.find((u) => u.id === partnerId)?.name || 'your partner'}.`,
+        scheduled_at: scheduledAt,
+        duration_minutes: 45,
+        meeting_url: session.meetingUrl,
+        status: 'upcoming',
+      });
+      if (error) throw error;
+      setLocalData((current) => ({ ...current, sessions: [...current.sessions, session] }));
+      setShowForm(false);
+      setMeetingUrl('');
+      notify('Session scheduled.', 'success');
+    } catch (error) {
+      console.error('Failed to schedule session:', error);
+      notify('Could not schedule the session.', 'error');
+    }
+  };
+
+  const change = async (id: string, status: 'cancelled' | 'completed') => {
+    try {
+      const { getSupabase } = await import('./lib/supabase-client');
+      const { error } = await getSupabase().from('sessions').update({ status }).eq('id', id);
+      if (error) throw error;
+      setLocalData((current) => ({ ...current, sessions: current.sessions.map((session) => session.id === id ? { ...session, status } : session) }));
+      notify(status === 'cancelled' ? 'Session cancelled.' : 'Session marked complete.', 'info');
+    } catch (error) {
+      console.error('Failed to update session:', error);
+      notify('Could not update the session.', 'error');
+    }
+  };
+
+  const reschedule = async (id: string) => {
+    const session = data.sessions.find((item) => item.id === id);
+    if (!session) return;
+    const next = new Date(`${session.date}T${session.time || '18:30'}:00`);
+    next.setDate(next.getDate() + 1);
+    const nextDate = next.toISOString().slice(0, 10);
+    const nextScheduledAt = next.toISOString();
+    try {
+      const { getSupabase } = await import('./lib/supabase-client');
+      const { error } = await getSupabase().from('sessions').update({ scheduled_at: nextScheduledAt }).eq('id', id);
+      if (error) throw error;
+      setLocalData((current) => ({ ...current, sessions: current.sessions.map((item) => item.id === id ? { ...item, date: nextDate } : item) }));
+      notify('Session moved one day later.', 'success');
+    } catch (error) {
+      console.error('Failed to reschedule session:', error);
+      notify('Could not reschedule the session.', 'error');
+    }
+  };
+
+  return <div className="fade-up"><PageTitle eyebrow="Make the swap real" title="Sessions." body="A good exchange has a time, a little intention, and somewhere to begin." action={<Button onClick={() => setShowForm(true)}><Plus size={16} /> Schedule session</Button>} /><div className="mb-7 flex gap-1 rounded-xl bg-[hsl(var(--muted))] p-1 sm:w-fit"><button onClick={() => setTab('upcoming')} className={classNames('rounded-lg px-5 py-2.5 text-sm font-bold', tab === 'upcoming' && 'bg-[hsl(var(--card))] shadow-sm')} data-testid="button-sessions-upcoming">Upcoming <span className="ml-1 text-xs text-[hsl(var(--muted-foreground))]">{data.sessions.filter((s) => s.status === 'upcoming').length}</span></button><button onClick={() => setTab('completed')} className={classNames('rounded-lg px-5 py-2.5 text-sm font-bold', tab === 'completed' && 'bg-[hsl(var(--card))] shadow-sm')} data-testid="button-sessions-completed">Completed</button></div>{showForm && <form onSubmit={schedule} className="mb-7 grid gap-4 rounded-2xl border border-[hsl(var(--primary)/.35)] bg-[hsl(var(--card))] p-5 sm:grid-cols-2 lg:grid-cols-4"><label><span className="mb-1.5 block text-xs font-bold">Partner</span><select value={partnerId} onChange={(e) => setPartnerId(e.target.value)} className="h-11 w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-3 text-sm" data-testid="select-session-partner">{partners.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select></label><label><span className="mb-1.5 block text-xs font-bold">Skill focus</span><input value={skill} onChange={(e) => setSkill(e.target.value)} placeholder="e.g. React or Public Speaking" className="h-11 w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-3 text-sm" data-testid="input-session-skill" /></label><label><span className="mb-1.5 block text-xs font-bold">Date</span><input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="h-11 w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-3 text-sm" data-testid="input-session-date" /></label><label><span className="mb-1.5 block text-xs font-bold">Time</span><input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="h-11 w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-3 text-sm" data-testid="input-session-time" /></label><label className="sm:col-span-2 lg:col-span-4"><span className="mb-1.5 block text-xs font-bold">Meeting link</span><input type="url" value={meetingUrl} onChange={(e) => setMeetingUrl(e.target.value)} placeholder="https://meet.google.com/..." className="h-11 w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-3 text-sm" data-testid="input-session-meeting-url" /></label><div className="flex gap-2 sm:col-span-2 lg:col-span-4 lg:justify-end"><Button variant="quiet" onClick={() => setShowForm(false)}>Cancel</Button><Button type="submit">Save session</Button></div></form>}{sessions.length ? <div className="space-y-3">{sessions.map((session) => { const user = data.users.find((item) => item.id === session.partnerId); return <div key={session.id} className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-5" data-testid={`card-session-detail-${session.id}`}><div className="flex flex-col gap-5 sm:flex-row sm:items-center"><div className="flex items-center gap-3 sm:w-[38%]"><Avatar user={user} /><div><p className="font-display text-lg font-bold">{session.skill}</p><p className="text-xs text-[hsl(var(--muted-foreground))]">with {user?.name}</p></div></div><div className="grid flex-1 grid-cols-2 gap-3 text-sm sm:grid-cols-3"><div><p className="text-[10px] font-bold uppercase tracking-wider text-[hsl(var(--muted-foreground))]">When</p><p className="mt-1 font-bold">{formatDate(session.date)} · {session.time}</p></div><div><p className="text-[10px] font-bold uppercase tracking-wider text-[hsl(var(--muted-foreground))]">Format</p><p className="mt-1 flex items-center gap-1.5 font-bold"><Video size={14} className="text-[hsl(var(--primary))]" />{session.type}</p></div><div><p className="text-[10px] font-bold uppercase tracking-wider text-[hsl(var(--muted-foreground))]">Length</p><p className="mt-1 font-bold">{session.duration}</p></div></div>{tab === 'upcoming' ? <div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => session.meetingUrl ? window.open(session.meetingUrl, '_blank', 'noopener,noreferrer') : notify('This session has no meeting link.', 'error')}><Video size={15} /> Join</Button><Button variant="outline" onClick={() => reschedule(session.id)} className="px-3" aria-label="Reschedule session"><CalendarDays size={15} /><span className="hidden lg:inline">Move</span></Button><button onClick={() => change(session.id, 'cancelled')} className="rounded-xl p-2.5 text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--accent)/.1)] hover:text-[hsl(var(--destructive))]" aria-label="Cancel session" data-testid={`button-cancel-session-${session.id}`}><XCircle size={17} /></button></div> : <Badge tone="green"><CheckCircle2 size={13} className="mr-1" /> Finished</Badge>}</div></div> })}</div> : <EmptyState icon={CalendarDays} title={tab === 'upcoming' ? 'Your calendar is open' : 'No completed sessions yet'} body={tab === 'upcoming' ? 'Schedule a focused conversation with someone who complements your skills.' : 'After your first exchange, it will show up here.'} action={tab === 'upcoming' ? <Button onClick={() => setShowForm(true)}><Plus size={15} /> Schedule one</Button> : undefined} />}</div>;
 }
+
 
 function FeedbackPage() {
   const { data, updateData, notify } = useStore();
@@ -818,14 +910,52 @@ function FeedbackPage() {
   const [comment, setComment] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const availableTags = ['Patient', 'Practical', 'Clear', 'Encouraging', 'Prepared'];
-  const submit = (event: React.FormEvent) => { event.preventDefault(); if (!selectedId) return; updateData((current) => ({ ...current, feedback: [...current.feedback, { id: makeId('feedback'), sessionId: selectedId, rating, comment, tags }] })); notify('Feedback shared. Thanks for closing the loop.', 'success'); setSelectedId(''); setComment(''); setTags([]); };
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!selectedId) return;
+    const feedback = { id: makeId('feedback'), sessionId: selectedId, rating, comment, tags, createdAt: new Date().toISOString() };
+    try {
+      const { getSupabase } = await import('./lib/supabase-client');
+      const { error } = await getSupabase().from('feedback').insert({
+        id: feedback.id,
+        session_id: feedback.sessionId,
+        user_id: CURRENT_USER_ID,
+        rating: feedback.rating,
+        comment: feedback.comment,
+        tags: feedback.tags,
+        created_at: feedback.createdAt,
+      });
+      if (error) throw error;
+      updateData((current) => ({ ...current, feedback: [...current.feedback, feedback] }));
+      notify('Feedback shared. Thanks for closing the loop.', 'success');
+      setSelectedId(''); setComment(''); setTags([]);
+    } catch (error) {
+      console.error('Failed to save feedback:', error);
+      notify('Could not save your feedback.', 'error');
+    }
+  };
   return <div className="fade-up"><PageTitle eyebrow="Close the loop" title="Leave the door open." body="A thoughtful note helps good peer teachers keep showing up." /><div className="grid gap-6 lg:grid-cols-[.85fr_1.15fr]"><div className="space-y-3">{finished.map((session) => { const partner = data.users.find((user) => user.id === session.partnerId); const done = data.feedback.some((item) => item.sessionId === session.id); return <button key={session.id} onClick={() => !done && setSelectedId(session.id)} disabled={done} className={classNames('flex w-full items-center gap-3 rounded-2xl border p-4 text-left transition', selectedId === session.id ? 'border-[hsl(var(--primary))] bg-[hsl(var(--card))] shadow-md' : 'border-[hsl(var(--border))] bg-[hsl(var(--card))]', done && 'opacity-60')} data-testid={`button-feedback-session-${session.id}`}><Avatar user={partner} size="sm" /><div className="min-w-0 flex-1"><p className="text-sm font-bold">{session.skill} with {partner?.name}</p><p className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">{formatDate(session.date)}</p></div>{done ? <CheckCircle2 size={18} className="text-[hsl(var(--primary))]" /> : <ChevronRight size={16} />}</button> })}</div>{selectedId ? <form onSubmit={submit} className="rounded-3xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-6 sm:p-8"><p className="font-mono text-[10px] uppercase tracking-[.18em] text-[hsl(var(--accent))]">Your note</p><h2 className="mt-2 font-display text-2xl font-bold">How did it feel?</h2><div className="mt-7 flex gap-2">{[1, 2, 3, 4, 5].map((value) => <button type="button" key={value} onClick={() => setRating(value)} className={classNames('rounded-xl p-2 transition', value <= rating ? 'text-[hsl(var(--secondary-foreground))]' : 'text-[hsl(var(--border))]')} aria-label={`Rate ${value} out of 5`} data-testid={`button-rating-${value}`}><Star size={28} className={value <= rating ? 'fill-[hsl(var(--secondary))]' : ''} /></button>)}</div><p className="mt-2 text-xs text-[hsl(var(--muted-foreground))]">{rating === 5 ? 'That sounds like a five-star exchange.' : 'Honest feedback helps both of you grow.'}</p><label className="mt-7 block"><span className="mb-1.5 block text-xs font-bold">A quick note <span className="font-normal text-[hsl(var(--muted-foreground))]">(optional)</span></span><textarea value={comment} onChange={(e) => setComment(e.target.value)} placeholder="What made the session useful?" rows={4} className="w-full resize-none rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] p-3 text-sm outline-none focus:border-[hsl(var(--primary))]" data-testid="textarea-feedback" /></label><div className="mt-5"><p className="text-xs font-bold">What stood out?</p><div className="mt-2 flex flex-wrap gap-2">{availableTags.map((tag) => <button type="button" key={tag} onClick={() => setTags((current) => current.includes(tag) ? current.filter((item) => item !== tag) : [...current, tag])} className={classNames('rounded-full border px-3 py-1.5 text-xs font-bold', tags.includes(tag) ? 'border-[hsl(var(--primary))] bg-[hsl(var(--primary)/.1)] text-[hsl(var(--primary))]' : 'border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))]')} data-testid={`button-feedback-tag-${tag.toLowerCase()}`}>{tag}</button>)}</div></div><Button type="submit" className="mt-7 w-full">Share feedback <ArrowRight size={15} /></Button></form> : <EmptyState icon={Star} title="You are all caught up" body="Complete another session and your next reflection will appear here." action={<Link href="/sessions" className="text-sm font-bold text-[hsl(var(--primary))]" data-testid="link-feedback-sessions">View sessions</Link>} />}</div></div>;
 }
 
 function NotificationsPage() {
   const { data, updateData, notify } = useStore();
-  const markRead = (id: string) => updateData((current) => ({ ...current, notifications: current.notifications.map((item) => item.id === id ? { ...item, read: true } : item) }));
-  const markAll = () => { updateData((current) => ({ ...current, notifications: current.notifications.map((item) => ({ ...item, read: true })) })); notify('All notifications marked as read.', 'success'); };
+  const markRead = async (id: string) => {
+    try {
+      const { getSupabase } = await import('./lib/supabase-client');
+      const { error } = await getSupabase().from('notifications').update({ read: true }).eq('id', id).eq('user_id', CURRENT_USER_ID);
+      if (error) throw error;
+      updateData((current) => ({ ...current, notifications: current.notifications.map((item) => item.id === id ? { ...item, read: true } : item) }));
+    } catch (error) { console.error('Failed to mark notification read:', error); }
+  };
+  const markAll = async () => {
+    try {
+      const { getSupabase } = await import('./lib/supabase-client');
+      const { error } = await getSupabase().from('notifications').update({ read: true }).eq('user_id', CURRENT_USER_ID).eq('read', false);
+      if (error) throw error;
+      updateData((current) => ({ ...current, notifications: current.notifications.map((item) => ({ ...item, read: true })) }));
+      notify('All notifications marked as read.', 'success');
+    } catch (error) { console.error('Failed to mark notifications read:', error); notify('Could not update notifications.', 'error'); }
+  };
   return <div className="fade-up"><PageTitle eyebrow="Keep in the loop" title="Notifications." body="The little nudges that keep your exchange circle moving." action={<Button variant="quiet" onClick={markAll}>Mark all read</Button>} /><div className="space-y-2">{data.notifications.length ? data.notifications.map((item) => <button key={item.id} onClick={() => markRead(item.id)} className={classNames('flex w-full items-start gap-4 rounded-2xl border p-4 text-left transition', item.read ? 'border-[hsl(var(--border))] bg-[hsl(var(--card)/.65)]' : 'border-[hsl(var(--primary)/.25)] bg-[hsl(var(--card))] shadow-sm')} data-testid={`button-notification-${item.id}`}><div className={classNames('mt-0.5 rounded-xl p-2.5', item.type === 'request' ? 'bg-[hsl(var(--accent)/.13)] text-[hsl(var(--accent))]' : item.type === 'session' ? 'bg-[hsl(var(--secondary)/.65)]' : 'bg-[hsl(var(--primary)/.1)] text-[hsl(var(--primary))]')}>{item.type === 'request' ? <UserPlus size={17} /> : item.type === 'session' ? <CalendarDays size={17} /> : <MessageCircle size={17} />}</div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center justify-between gap-2"><p className="text-sm font-bold">{item.title}</p><span className="text-[11px] text-[hsl(var(--muted-foreground))]">{formatRelative(item.createdAt)}</span></div><p className="mt-1 text-sm leading-6 text-[hsl(var(--muted-foreground))]">{item.body}</p></div>{!item.read && <span className="mt-2 h-2 w-2 rounded-full bg-[hsl(var(--accent))]" />}</button>) : <EmptyState icon={Bell} title="All quiet here" body="New requests, messages, and session reminders will land here." />}</div></div>;
 }
 
@@ -851,8 +981,20 @@ function SettingsPage() {
   const [name, setName] = useState(currentUser.name);
   const [bio, setBio] = useState(currentUser.bio);
   const [availability, setAvailability] = useState(currentUser.availability);
-  const save = (event: React.FormEvent) => { event.preventDefault(); updateData((current) => ({ ...current, users: current.users.map((user) => user.id === CURRENT_USER_ID ? { ...user, name, bio, availability } : user) })); notify('Profile preferences saved.', 'success'); };
-  const logout = () => { setAuth(false); setAuthenticated(false); setLocation('/login'); };
+  const save = async (event: React.FormEvent) => {
+    event.preventDefault();
+    try {
+      const { getSupabase } = await import('./lib/supabase-client');
+      const { error } = await getSupabase().from('profiles').update({ full_name: name.trim(), bio, availability, updated_at: new Date().toISOString() }).eq('id', CURRENT_USER_ID);
+      if (error) throw error;
+      updateData((current) => ({ ...current, users: current.users.map((user) => user.id === CURRENT_USER_ID ? { ...user, name: name.trim(), bio, availability } : user) }));
+      notify('Profile preferences saved.', 'success');
+    } catch (error) {
+      console.error('Failed to save profile:', error);
+      notify('Could not save your profile.', 'error');
+    }
+  };
+  const logout = () => { setAuthenticated(false); setLocation('/login'); };
   return <div className="fade-up"><PageTitle eyebrow="Your space, your rules" title="Settings." body="Keep your profile honest and your notifications useful." /><div className="grid gap-6 lg:grid-cols-[1fr_.7fr]"><form onSubmit={save} className="rounded-3xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-6 sm:p-8"><div className="flex items-center gap-4 border-b border-[hsl(var(--border))] pb-6"><Avatar user={currentUser} size="lg" /><div><p className="font-display text-xl font-bold">{currentUser.name}</p><p className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">{currentUser.email}</p></div></div><div className="mt-7 space-y-5"><label className="block"><span className="mb-1.5 block text-xs font-bold">Name</span><input value={name} onChange={(e) => setName(e.target.value)} className="h-11 w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-3 text-sm outline-none focus:border-[hsl(var(--primary))]" data-testid="input-settings-name" /></label><label className="block"><span className="mb-1.5 block text-xs font-bold">Short bio</span><textarea value={bio} onChange={(e) => setBio(e.target.value)} rows={4} className="w-full resize-none rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] p-3 text-sm outline-none focus:border-[hsl(var(--primary))]" data-testid="textarea-settings-bio" /></label><label className="block"><span className="mb-1.5 block text-xs font-bold">Availability</span><input value={availability} onChange={(e) => setAvailability(e.target.value)} className="h-11 w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-3 text-sm outline-none focus:border-[hsl(var(--primary))]" data-testid="input-settings-availability" /></label></div><Button type="submit" className="mt-7">Save profile</Button></form><div className="space-y-4"><div className="rounded-3xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-6"><div className="flex items-center gap-3"><Bell size={18} className="text-[hsl(var(--accent))]" /><h2 className="font-display text-lg font-bold">Notifications</h2></div><p className="mt-3 text-sm leading-6 text-[hsl(var(--muted-foreground))]">You will receive in-app updates for requests, messages, and upcoming sessions.</p><Link href="/notifications" className="mt-4 inline-flex text-sm font-bold text-[hsl(var(--primary))]" data-testid="link-settings-notifications">Review notifications <ArrowRight size={15} className="ml-1" /></Link></div><div className="rounded-3xl border border-[hsl(var(--accent)/.3)] bg-[hsl(var(--accent)/.07)] p-6"><h2 className="font-display text-lg font-bold">Live account</h2><p className="mt-2 text-sm leading-6 text-[hsl(var(--muted-foreground))]">Your profile, requests, messages, sessions, and notifications are stored in your SkillSwap account.</p></div><button onClick={logout} className="flex w-full items-center justify-center gap-2 rounded-xl border border-[hsl(var(--border))] px-4 py-3 text-sm font-bold text-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--destructive)/.3)] hover:text-[hsl(var(--destructive))]" data-testid="button-settings-logout"><LogOut size={16} /> Sign out of SkillSwap</button></div></div></div>;
 }
 
@@ -911,6 +1053,10 @@ function App() {
     return subscribeToRealtime(currentUserId, () => { refresh(currentUserId).catch(console.error); });
   }, [authenticated, currentUserId]);
 
+  const setLocalData = (updater: AppData | ((current: AppData) => AppData)) => {
+    setData((current) => typeof updater === 'function' ? updater(current) : updater);
+  };
+
   const updateData = (updater: AppData | ((current: AppData) => AppData)) => {
     setData((current) => {
       const next = typeof updater === 'function' ? updater(current) : updater;
@@ -937,6 +1083,6 @@ function App() {
 
   if (!ready) return <PageLoading />;
 
-  return <StoreContext.Provider value={{ data, updateData, currentUser, notify, authenticated, setAuthenticated }}><WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}><Router /></WouterRouter><ToastLayer toast={toast} dismiss={() => setToast(null)} /></StoreContext.Provider>;
+  return <StoreContext.Provider value={{ data, updateData, setLocalData, currentUser, notify, authenticated, setAuthenticated }}><WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}><Router /></WouterRouter><ToastLayer toast={toast} dismiss={() => setToast(null)} /></StoreContext.Provider>;
 }
 export default App;
