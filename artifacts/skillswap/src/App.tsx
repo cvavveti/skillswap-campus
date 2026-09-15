@@ -81,6 +81,7 @@ type Store = {
   notify: (message: string, kind?: ToastKind) => void;
   authenticated: boolean;
   setAuthenticated: (value: boolean) => void;
+  refresh: (userId: string) => Promise<void>;
 };
 
 const StoreContext = createContext<Store | null>(null);
@@ -1113,6 +1114,6 @@ function App() {
 
   if (!ready) return <PageLoading />;
 
-  return <StoreContext.Provider value={{ data, updateData, setLocalData, currentUser, notify, authenticated, setAuthenticated }}><WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}><Router /></WouterRouter><ToastLayer toast={toast} dismiss={() => setToast(null)} /></StoreContext.Provider>;
+  return <StoreContext.Provider value={{ data, updateData, setLocalData, currentUser, notify, authenticated, setAuthenticated, refresh }}><WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}><Router /></WouterRouter><ToastLayer toast={toast} dismiss={() => setToast(null)} /></StoreContext.Provider>;
 }
 export default App;
