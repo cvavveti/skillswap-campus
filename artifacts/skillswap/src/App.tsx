@@ -709,39 +709,78 @@ function NotesPage() {
     setFile(null);
     setShowForm(false);
   };
+const uploadNote = async (event: React.FormEvent) => {
+  event.preventDefault();
 
-  const uploadNote = (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!title.trim() || !file) {
-      notify('Add a title and choose a note file first.', 'error');
+  if (!title.trim() || !file) {
+    notify('Add a title and choose a note file first.', 'error');
+    return;
+  }
+
+  if (file.size > 10_000_000) {
+    notify('Keep demo uploads under 10 MB so they can be saved.', 'error');
+    return;
+  }
+
+  const reader = new FileReader();
+
+  reader.onload = async () => {
+    const fileData = typeof reader.result === 'string' ? reader.result : null;
+
+    if (!fileData) {
+      notify('That file could not be read.', 'error');
       return;
     }
-    if (file.size > 10_000_000) {
-      notify('Keep demo uploads under 10 MB so they can be saved in this browser.', 'error');
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const note: Note = {
-        id: makeId('note'),
-        title: title.trim(),
-        subject,
-        description: description.trim() || 'Shared notes for the SkillSwap circle.',
-        fileName: file.name,
-        fileType: file.type || 'application/octet-stream',
-        fileSize: file.size,
-        fileData: typeof reader.result === 'string' ? reader.result : undefined,
-        uploadedAt: new Date().toISOString(),
-        ownerId: currentUserId,
-      };
-      updateData((current) => ({ ...current, notes: [note, ...current.notes] }));
+
+    const note: Note = {
+      id: makeId('note'),
+      title: title.trim(),
+      subject,
+      description: description.trim() || 'Shared notes for the SkillSwap circle.',
+      fileName: file.name,
+      fileType: file.type || 'application/octet-stream',
+      fileSize: file.size,
+      fileData,
+      uploadedAt: new Date().toISOString(),
+      ownerId: currentUserId,
+    };
+
+    try {
+      const { error } = await getSupabase().from('notes').insert({
+        id: note.id,
+        title: note.title,
+        subject: note.subject,
+        description: note.description,
+        file_name: note.fileName,
+        file_type: note.fileType,
+        file_size: note.fileSize,
+        file_data: note.fileData,
+        uploaded_at: note.uploadedAt,
+        owner_id: currentUserId,
+      });
+
+      if (error) throw error;
+      updateData((current) => ({
+
+        ...current,
+        notes: [note, ...current.notes],
+      }));
+
       resetForm();
       notify('Notes uploaded to your library.', 'success');
-    };
-    reader.onerror = () => notify('That file could not be read. Try it again.', 'error');
-    reader.readAsDataURL(file);
+    } catch (error) {
+      console.error('Note upload failed:', error);
+      notify('Could not save the note. Please try a smaller file.', 'error');
+    }
   };
 
+  reader.onerror = () => {
+    notify('That file could not be read. Try it again.', 'error');
+  };
+
+  reader.readAsDataURL(file);
+};
+  
   const removeNote = (id: string) => {
     updateData((current) => ({ ...current, notes: current.notes.filter((note) => note.id !== id) }));
     notify('Note removed from your library.', 'info');
@@ -1012,7 +1051,7 @@ function SettingsPage() {
       const { getSupabase } = await import('./lib/supabase-client');
       const { error } = await getSupabase().from('profiles').update({ full_name: name.trim(), bio, availability, updated_at: new Date().toISOString() }).eq('id', CURRENT_USER_ID);
       if (error) throw error;
-      updateData((current) => ({ ...current, users: current.users.map((user) => user.id === currentUserId ? { ...user, name: name.trim(), bio, availability } : user) }));
+      updateData((current) => ({ ...current, users: current.users.map((user) => user.id === currentUser.id ? { ...user, name: name.trim(), bio, availability } : user) }));
       notify('Profile preferences saved.', 'success');
     } catch (error) {
       console.error('Failed to save profile:', error);
