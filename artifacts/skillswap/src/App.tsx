@@ -369,7 +369,7 @@ function AuthPage({ mode }: { mode: 'login' | 'register' }) {
 }
 
 function DashboardPage() {
-  const { currentUser, data } = useStore();
+  const { currentUser, currentUserId, data } = useStore();
   const pending = data.requests.filter((request) => request.receiverId === CURRENT_USER_ID && request.status === 'pending');
   const upcoming = data.sessions.filter((session) => session.userId === CURRENT_USER_ID && session.status === 'upcoming').slice(0, 2);
   const partners = data.users
