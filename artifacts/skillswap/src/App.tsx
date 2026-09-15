@@ -389,6 +389,65 @@ function DiscoverPage() {
   const { currentUser, data, updateData, notify } = useStore();
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('All');
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const refreshDiscover = async () => {
+      try {
+        const { getSupabase } = await import('./lib/supabase-client');
+        const sb = getSupabase();
+
+        const { data: memberships, error } = await sb
+          .from('user_skills')
+          .select('user_id, skill_id, skill_type');
+
+        if (error) throw error;
+
+        if (cancelled) return;
+
+        const { data: skillRows, error: skillError } = await sb
+          .from('skills')
+          .select('id, name, category');
+
+        if (skillError) throw skillError;
+
+        const skillMap = new Map(
+          (skillRows || []).map((skill) => [skill.id, skill])
+        );
+
+        updateData((current) => ({
+          ...current,
+          skills: (memberships || []).map((item) => {
+            const skill = skillMap.get(item.skill_id);
+            if (!skill) return null;
+
+            return {
+              id: item.skill_id,
+              name: skill.name,
+              category: skill.category || 'Other',
+              level: 'Intermediate',
+              description: item.skill_type === 'teach'
+                ? 'A skill I enjoy sharing with other students.'
+                : 'A skill I would like to practice with a peer.',
+              experience: 'Some experience',
+              ownerId: item.user_id,
+              mode: item.skill_type,
+            };
+          }).filter(Boolean),
+        }));
+      } catch (error) {
+        console.error('Discover skill refresh failed:', error);
+      }
+    };
+
+    refreshDiscover();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const categories = ['All', 'Technology', 'Design', 'Communication', 'Creative', 'Business'];
   const matches = useMemo(() => {
     const everyoneElse = data.users
@@ -419,7 +478,7 @@ function DiscoverPage() {
       notify('Could not send the exchange request.', 'error');
     }
   };
-  return <div className="fade-up"><PageTitle eyebrow="Find your people" title="Discover your next exchange." body="Search by the skill you want, the one you can share, or simply a name. The best match is not always the obvious one." /><div className="mb-7 flex flex-col gap-3 sm:flex-row"><label className="relative flex-1"><Search size={17} className="absolute left-4 top-3.5 text-[hsl(var(--muted-foreground))]" /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Try “React”, “writing”, or a name…" className="h-11 w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] pl-11 pr-4 text-sm outline-none focus:border-[hsl(var(--primary))]" data-testid="input-discover-search" /></label><button className="flex h-11 items-center justify-center gap-2 rounded-xl border border-[hsl(var(--border))] px-4 text-sm font-bold hover:bg-[hsl(var(--muted))]" data-testid="button-discover-filter"><Filter size={16} /> Filters</button></div><div className="mb-8 flex gap-2 overflow-x-auto pb-1 scrollbar-hide">{categories.map((item) => <button key={item} onClick={() => setCategory(item)} className={classNames('whitespace-nowrap rounded-full px-4 py-2 text-xs font-bold transition', category === item ? 'bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]' : 'bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--border))]')} data-testid={`button-filter-${item.toLowerCase()}`}>{item}</button>)}</div>{matches.length ? <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{matches.map(({ user, match }) => <div key={user.id} className="lift rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-5" data-testid={`card-discover-${user.id}`}><div className="flex items-start justify-between"><Link href={`/profile/${user.id}`} data-testid={`link-discover-profile-${user.id}`}><Avatar user={user} size="lg" /></Link><Badge tone="green">{match.score}% match</Badge></div><Link href={`/profile/${user.id}`} className="mt-4 block" data-testid={`link-discover-name-${user.id}`}><h3 className="font-display text-xl font-bold">{user.name}</h3><p className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">{user.course} · {user.year}</p></Link><p className="mt-4 line-clamp-2 min-h-10 text-sm leading-5 text-[hsl(var(--muted-foreground))]">{user.bio}</p><div className="mt-4 flex flex-wrap gap-1.5">{match.learn.slice(0, 2).map((skill) => <Badge key={skill} tone="coral">Teaches {skill}</Badge>)}{match.teach.slice(0, 2).map((skill) => <Badge key={skill} tone="gold">Wants {skill}</Badge>)}</div><div className="mt-5 flex items-center gap-2 border-t border-[hsl(var(--border))] pt-4"><Button className="flex-1" onClick={() => request(user)}><UserPlus size={15} /> Send request</Button><Link href={`/profile/${user.id}`} className="rounded-xl p-2.5 text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))]" data-testid={`link-discover-open-${user.id}`}><ExternalLink size={16} /></Link></div></div>)}</div> : <EmptyState icon={Search} title="No close matches yet" body="Try a broader search or switch back to all categories. Your next good exchange may use different words." action={<Button variant="quiet" onClick={() => { setQuery(''); setCategory('All'); }}>Clear filters</Button>} />}</div>;
+  return <div className="fade-up"><PageTitle eyebrow="Find your people" title="Discover your next exchange." body="Search by the skill you want, the one you can share, or simply a name. The best match is not always the obvious one." /><div className="mb-7 flex flex-col gap-3 sm:flex-row"><label className="relative flex-1"><Search size={17} className="absolute left-4 top-3.5 text-[hsl(var(--muted-foreground))]" /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Try “React”, “writing”, or a name…" className="h-11 w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] pl-11 pr-4 text-sm outline-none focus:border-[hsl(var(--primary))]" data-testid="input-discover-search" /></label><button className="flex h-11 items-center justify-center gap-2 rounded-xl border border-[hsl(var(--border))] px-4 text-sm font-bold hover:bg-[hsl(var(--muted))]" data-testid="button-discover-filter"><Filter size={16} /> Filters</button></div><div className="mb-8 flex gap-2 overflow-x-auto pb-1 scrollbar-hide">{categories.map((item) => <button key={item} onClick={() => setCategory(item)} className={classNames('whitespace-nowrap rounded-full px-4 py-2 text-xs font-bold transition', category === item ? 'bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]' : 'bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--border))]')} data-testid={`button-filter-${item.toLowerCase()}`}>{item}</button>)}</div>{matches.length ? <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{matches.map(({ user, match }) => <div key={user.id} className="lift rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-5" data-testid={`card-discover-${user.id}`}><div className="flex items-start justify-between"><Link href={`/profile/${user.id}`} data-testid={`link-discover-profile-${user.id}`}><Avatar user={user} size="lg" /></Link><Badge tone="green">{match.score}% match</Badge></div><Link href={`/profile/${user.id}`} className="mt-4 block" data-testid={`link-discover-name-${user.id}`}><h3 className="font-display text-xl font-bold">{user.name}</h3><p className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">{user.course} · {user.year}</p></Link><p className="mt-4 line-clamp-2 min-h-10 text-sm leading-5 text-[hsl(var(--muted-foreground))]">{user.bio}</p><div className="mt-4 flex flex-wrap gap-1.5">{user.skillsToTeach.slice(0, 3).map((skill) => <Badge key={`teach-${skill}`} tone="coral">Teaches {skill}</Badge>)}{user.skillsToLearn.slice(0, 3).map((skill) => <Badge key={`learn-${skill}`} tone="gold">Wants {skill}</Badge>)}</div><div className="mt-5 flex items-center gap-2 border-t border-[hsl(var(--border))] pt-4"><Button className="flex-1" onClick={() => request(user)}><UserPlus size={15} /> Send request</Button><Link href={`/profile/${user.id}`} className="rounded-xl p-2.5 text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))]" data-testid={`link-discover-open-${user.id}`}><ExternalLink size={16} /></Link></div></div>)}</div> : <EmptyState icon={Search} title="No close matches yet" body="Try a broader search or switch back to all categories. Your next good exchange may use different words." action={<Button variant="quiet" onClick={() => { setQuery(''); setCategory('All'); }}>Clear filters</Button>} />}</div>;
 }
 
 function ProfilePage() {
@@ -456,14 +515,151 @@ function SkillsPage() {
   const skills = data.skills.filter((skill) => skill.ownerId === CURRENT_USER_ID && skill.mode === mode);
   const openAdd = () => { setEditing(null); setName(''); setFormOpen(true); };
   const openEdit = (skill: Skill) => { setEditing(skill); setName(skill.name); setLevel(skill.level); setCategory(skill.category); setFormOpen(true); };
-  const saveSkill = (event: React.FormEvent) => {
+  const saveSkill = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!name.trim()) { notify('Give your skill a name first.', 'error'); return; }
-    if (editing) updateData((current) => ({ ...current, skills: current.skills.map((skill) => skill.id === editing.id ? { ...skill, name: name.trim(), level, category } : skill) }));
-    else updateData((current) => ({ ...current, skills: [...current.skills, { id: makeId('skill'), name: name.trim(), level, category, description: mode === 'teach' ? 'A skill I enjoy sharing with other students.' : 'A skill I would like to practice with a peer.', experience: level === 'Advanced' ? 'Several years' : 'Some experience', ownerId: CURRENT_USER_ID, mode }] }));
-    setFormOpen(false); notify(editing ? 'Skill updated.' : 'Skill added to your profile.', 'success');
+
+    if (!name.trim()) {
+      notify('Give your skill a name first.', 'error');
+      return;
+    }
+
+    try {
+      const { getSupabase } = await import('./lib/supabase-client');
+      const sb = getSupabase();
+
+      if (editing) {
+        const { error: skillError } = await sb
+          .from('skills')
+          .update({
+            name: name.trim(),
+            category,
+          })
+          .eq('id', editing.id);
+
+        if (skillError) throw skillError;
+
+        updateData((current) => ({
+          ...current,
+          skills: current.skills.map((skill) =>
+            skill.id === editing.id
+              ? { ...skill, name: name.trim(), level, category }
+              : skill
+          ),
+        }));
+
+        setFormOpen(false);
+        notify('Skill updated.', 'success');
+        return;
+      }
+
+      const { data: existing, error: lookupError } = await sb
+        .from('skills')
+        .select('id')
+        .eq('name', name.trim())
+        .maybeSingle();
+
+      if (lookupError) throw lookupError;
+
+      let skillId = existing?.id;
+
+      if (!skillId) {
+        const { data: created, error: createError } = await sb
+          .from('skills')
+          .insert({
+            name: name.trim(),
+            category,
+          })
+          .select('id')
+          .single();
+
+        if (createError) throw createError;
+        skillId = created.id;
+      }
+
+      const newSkill = {
+        id: skillId,
+        name: name.trim(),
+        level,
+        category,
+        description:
+          mode === 'teach'
+            ? 'A skill I enjoy sharing with other students.'
+            : 'A skill I would like to practice with a peer.',
+        experience: level === 'Advanced' ? 'Several years' : 'Some experience',
+        ownerId: CURRENT_USER_ID,
+        mode,
+      };
+
+      const { data: existingMembership, error: membershipLookupError } = await sb
+        .from('user_skills')
+        .select('id')
+        .eq('user_id', CURRENT_USER_ID)
+        .eq('skill_id', skillId)
+        .eq('skill_type', mode)
+        .maybeSingle();
+
+      if (membershipLookupError) throw membershipLookupError;
+
+      if (!existingMembership) {
+        const { error: membershipInsertError } = await sb
+          .from('user_skills')
+          .insert({
+            user_id: CURRENT_USER_ID,
+            skill_id: skillId,
+            skill_type: mode,
+          });
+
+        if (membershipInsertError) throw membershipInsertError;
+      }
+
+      updateData((current) => ({
+        ...current,
+        skills: [
+          ...current.skills.filter(
+            (skill) =>
+              !(skill.ownerId === CURRENT_USER_ID && skill.name.toLowerCase() === name.trim().toLowerCase() && skill.mode === mode)
+          ),
+          newSkill,
+        ],
+      }));
+
+      setFormOpen(false);
+      notify('Skill added to your profile.', 'success');
+    } catch (error) {
+      console.error('Failed to save skill:', error);
+      notify('Could not save this skill. Please try again.', 'error');
+    }
   };
-  const deleteSkill = (id: string) => { updateData((current) => ({ ...current, skills: current.skills.filter((skill) => skill.id !== id) })); notify('Skill removed.', 'info'); };
+
+  const deleteSkill = async (id: string) => {
+    try {
+      const { getSupabase } = await import('./lib/supabase-client');
+      const sb = getSupabase();
+      const skill = data.skills.find((item) => item.id === id);
+
+      if (!skill) return;
+
+      const { error } = await sb
+        .from('user_skills')
+        .delete()
+        .eq('user_id', CURRENT_USER_ID)
+        .eq('skill_id', skill.id)
+        .eq('skill_type', skill.mode);
+
+      if (error) throw error;
+
+      updateData((current) => ({
+        ...current,
+        skills: current.skills.filter((item) => item.id !== id),
+      }));
+
+      notify('Skill removed.', 'info');
+    } catch (error) {
+      console.error('Failed to delete skill:', error);
+      notify('Could not remove this skill.', 'error');
+    }
+  };
+
   return <div className="fade-up"><PageTitle eyebrow="Your exchange profile" title="Your skills, in both directions." body="The more honest your list, the more useful your matches. Keep it specific and current." action={<Button onClick={openAdd}><Plus size={16} /> Add skill</Button>} /><div className="mb-7 flex rounded-xl bg-[hsl(var(--muted))] p-1 sm:w-fit"><button onClick={() => setMode('teach')} className={classNames('flex min-w-[130px] items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-bold', mode === 'teach' ? 'bg-[hsl(var(--card))] shadow-sm' : 'text-[hsl(var(--muted-foreground))]')} data-testid="button-skills-teach"><BookOpen size={15} /> I can teach</button><button onClick={() => setMode('learn')} className={classNames('flex min-w-[130px] items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-bold', mode === 'learn' ? 'bg-[hsl(var(--card))] shadow-sm' : 'text-[hsl(var(--muted-foreground))]')} data-testid="button-skills-learn"><GraduationCap size={15} /> I want to learn</button></div>{formOpen && <form onSubmit={saveSkill} className="mb-7 rounded-2xl border border-[hsl(var(--primary)/.35)] bg-[hsl(var(--card))] p-5 shadow-lg"><div className="flex items-center justify-between"><h2 className="font-display text-xl font-bold">{editing ? 'Edit skill' : `Add a skill to ${mode === 'teach' ? 'teach' : 'learn'}`}</h2><button type="button" onClick={() => setFormOpen(false)} data-testid="button-close-skill-form"><X size={18} /></button></div><div className="mt-5 grid gap-4 sm:grid-cols-3"><label className="sm:col-span-1"><span className="mb-1.5 block text-xs font-bold">Skill name</span><input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Motion Design" className="h-11 w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-3 text-sm outline-none focus:border-[hsl(var(--primary))]" data-testid="input-skill-name" /></label><label><span className="mb-1.5 block text-xs font-bold">Category</span><select value={category} onChange={(e) => setCategory(e.target.value)} className="h-11 w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-3 text-sm" data-testid="select-skill-category"><option>Technology</option><option>Design</option><option>Communication</option><option>Creative</option><option>Business</option></select></label><label><span className="mb-1.5 block text-xs font-bold">Level</span><select value={level} onChange={(e) => setLevel(e.target.value as SkillLevel)} className="h-11 w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-3 text-sm" data-testid="select-skill-level"><option>Beginner</option><option>Intermediate</option><option>Advanced</option></select></label></div><div className="mt-5 flex justify-end gap-2"><Button variant="quiet" onClick={() => setFormOpen(false)}>Cancel</Button><Button type="submit">{editing ? 'Save changes' : 'Add skill'}</Button></div></form>}{skills.length ? <div className="grid gap-4 md:grid-cols-2">{skills.map((skill) => <div key={skill.id} className="lift rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-5" data-testid={`card-skill-${skill.id}`}><div className="flex items-start justify-between"><div className={classNames('rounded-xl p-2.5', mode === 'teach' ? 'bg-[hsl(var(--primary)/.12)] text-[hsl(var(--primary))]' : 'bg-[hsl(var(--secondary)/.65)]')}><BookOpen size={18} /></div><div className="flex gap-1"><button onClick={() => openEdit(skill)} className="rounded-lg p-2 text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))]" aria-label={`Edit ${skill.name}`} data-testid={`button-edit-skill-${skill.id}`}><Edit3 size={15} /></button><button onClick={() => deleteSkill(skill.id)} className="rounded-lg p-2 text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--accent)/.12)] hover:text-[hsl(var(--destructive))]" aria-label={`Delete ${skill.name}`} data-testid={`button-delete-skill-${skill.id}`}><Trash2 size={15} /></button></div></div><h3 className="mt-5 font-display text-xl font-bold">{skill.name}</h3><div className="mt-2 flex gap-2"><Badge tone={mode === 'teach' ? 'green' : 'gold'}>{skill.level}</Badge><Badge>{skill.category}</Badge></div><p className="mt-4 text-sm leading-6 text-[hsl(var(--muted-foreground))]">{skill.description}</p></div>)}</div> : <EmptyState icon={mode === 'teach' ? BookOpen : GraduationCap} title={`No ${mode === 'teach' ? 'teaching' : 'learning'} skills yet`} body="Add one specific skill to help the right people find you." action={<Button onClick={openAdd}><Plus size={15} /> Add your first skill</Button>} />}</div>;
 }
 
