@@ -392,7 +392,7 @@ function SessionMini({ session }: { session: AppData['sessions'][number] }) {
 }
 
 function DiscoverPage() {
-  const { currentUser, data, setLocalData, notify } = useStore();
+  const { currentUser, currentUserId, data, setLocalData, notify } = useStore();
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('All');
 
@@ -479,7 +479,9 @@ function DiscoverPage() {
   }, [category, currentUser, data.skills, data.users, query]);
   const request = async (user: User) => {
     if (data.requests.some((item) => item.senderId === CURRENT_USER_ID && item.receiverId === user.id && item.status === 'pending')) { notify('You already have a request out to this person.', 'info'); return; }
-    const request = { id: makeId('req'), senderId: CURRENT_USER_ID, receiverId: user.id, status: 'pending' as const, message: `Hi ${user.name.split(' ')[0]} — I think we could make a good exchange.`, createdAt: new Date().toISOString() };
+    const { data: { user: authUser } } = await getSupabase().auth.getUser();
+    if (!authUser) { notify('Please log in again.', 'error'); return; }
+    const request = { id: makeId('req'), senderId: authUser.id, receiverId: user.id, status: 'pending' as const, message: `Hi ${user.name.split(' ')[0]} — I think we could make a good exchange.`, createdAt: new Date().toISOString() };
     try {
       const { getSupabase } = await import('./lib/supabase-client');
       const { error } = await getSupabase().from('swap_requests').insert({ id: request.id, sender_id: request.senderId, receiver_id: request.receiverId, status: request.status, message: request.message, created_at: request.createdAt });
@@ -506,7 +508,9 @@ function ProfilePage() {
       notify('You already have a request out to this person.', 'info');
       return;
     }
-    const request = { id: makeId('req'), senderId: CURRENT_USER_ID, receiverId: user.id, status: 'pending' as const, message: `Hi ${user.name.split(' ')[0]} — I think we could make a good exchange.`, createdAt: new Date().toISOString() };
+    const { data: { user: authUser } } = await getSupabase().auth.getUser();
+    if (!authUser) { notify('Please log in again.', 'error'); return; }
+    const request = { id: makeId('req'), senderId: authUser.id, receiverId: user.id, status: 'pending' as const, message: `Hi ${user.name.split(' ')[0]} — I think we could make a good exchange.`, createdAt: new Date().toISOString() };
     try {
       const { getSupabase } = await import('./lib/supabase-client');
       const { error } = await getSupabase().from('swap_requests').insert({ id: request.id, sender_id: request.senderId, receiver_id: request.receiverId, status: request.status, message: request.message, created_at: request.createdAt });
