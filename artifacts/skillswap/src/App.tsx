@@ -69,6 +69,7 @@ import {
   subscribeToRealtime,
   syncAppData,
 } from '@/lib/supabase-store';
+import { getSupabase } from '@/lib/supabase-client';
 import type { User } from '@/lib/skillswap-data';
 
 type ToastKind = 'success' | 'error' | 'info';
@@ -78,6 +79,7 @@ type Store = {
   updateData: (updater: AppData | ((current: AppData) => AppData)) => void;
   setLocalData: (updater: AppData | ((current: AppData) => AppData)) => void;
   currentUser: User;
+  currentUserId: string;
   notify: (message: string, kind?: ToastKind) => void;
   authenticated: boolean;
   setAuthenticated: (value: boolean) => void;
@@ -787,7 +789,7 @@ function RequestsPage() {
   const changeStatus = async (id: string, status: RequestStatus) => {
     try {
       const { getSupabase } = await import('./lib/supabase-client');
-      const { error } = await getSupabase().from('swap_requests').update({ status, updated_at: new Date().toISOString() }).eq('id', id);
+      const { error } = await getSupabase().from('swap_requests').update({ status }).eq('id', id);
       if (error) throw error;
       setLocalData((current) => ({ ...current, requests: current.requests.map((item) => item.id === id ? { ...item, status } : item) }));
       notify(status === 'accepted' ? 'Request accepted. Your conversation is ready.' : `Request ${status}.`, status === 'rejected' ? 'info' : 'success');
