@@ -205,7 +205,7 @@ const navGroups = [
 function Shell({ children }: { children: ReactNode }) {
   const [location, setLocation] = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { currentUser, data, setAuthenticated, notify } = useStore();
+  const { currentUser, currentUserId, data, setAuthenticated, notify } = useStore();
   const unread = data.notifications.filter((item) => !item.read).length;
   const isActive = (href: string) => location === href || (href !== '/dashboard' && location.startsWith(`${href}/`));
   const logout = async () => {
@@ -233,7 +233,7 @@ function Shell({ children }: { children: ReactNode }) {
                 return (
                   <Link href={item.href} key={item.href} onClick={() => setMobileOpen(false)} className={classNames('flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold transition', isActive(item.href) ? 'bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]' : 'text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))] hover:text-[hsl(var(--foreground))]')} data-testid={`link-nav-${item.label.toLowerCase().replace(' ', '-')}`}>
                     <Icon size={17} /><span>{item.label}</span>
-                    {item.href === '/requests' && <span className={classNames('ml-auto rounded-full px-1.5 py-0.5 text-[10px]', isActive(item.href) ? 'bg-white/20' : 'bg-[hsl(var(--accent)/.18)] text-[hsl(var(--accent))]')}>{data.requests.filter((r) => r.receiverId === CURRENT_USER_ID && r.status === 'pending').length}</span>}
+                    {item.href === '/requests' && <span className={classNames('ml-auto rounded-full px-1.5 py-0.5 text-[10px]', isActive(item.href) ? 'bg-white/20' : 'bg-[hsl(var(--accent)/.18)] text-[hsl(var(--accent))]')}>{data.requests.filter((r) => r.receiverId === currentUserId && r.status === 'pending').length}</span>}
                   </Link>
                 );
               })}
@@ -610,7 +610,7 @@ function SkillsPage() {
             ? 'A skill I enjoy sharing with other students.'
             : 'A skill I would like to practice with a peer.',
         experience: level === 'Advanced' ? 'Several years' : 'Some experience',
-        ownerId: CURRENT_USER_ID,
+        ownerId: currentUserId,
         mode,
       };
 
@@ -694,13 +694,13 @@ function formatFileSize(bytes: number) {
 }
 
 function NotesPage() {
-  const { data, updateData, notify } = useStore();
+  const { currentUserId, data, updateData, notify } = useStore();
   const [showForm, setShowForm] = useState(false);
   const [title, setTitle] = useState('');
   const [subject, setSubject] = useState('React');
   const [description, setDescription] = useState('');
   const [file, setFile] = useState<File | null>(null);
-  const notes = data.notes.filter((note) => note.ownerId === CURRENT_USER_ID);
+  const notes = data.notes.filter((note) => note.ownerId === currentUserId);
 
   const resetForm = () => {
     setTitle('');
@@ -732,7 +732,7 @@ function NotesPage() {
         fileSize: file.size,
         fileData: typeof reader.result === 'string' ? reader.result : undefined,
         uploadedAt: new Date().toISOString(),
-        ownerId: CURRENT_USER_ID,
+        ownerId: currentUserId,
       };
       updateData((current) => ({ ...current, notes: [note, ...current.notes] }));
       resetForm();
