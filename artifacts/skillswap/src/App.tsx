@@ -369,7 +369,12 @@ function DashboardPage() {
   const { currentUser, data } = useStore();
   const pending = data.requests.filter((request) => request.receiverId === CURRENT_USER_ID && request.status === 'pending');
   const upcoming = data.sessions.filter((session) => session.userId === CURRENT_USER_ID && session.status === 'upcoming').slice(0, 2);
-  const partners = data.users.filter((user) => user.id !== CURRENT_USER_ID).map((user) => ({ user, match: getMatchPercentage(currentUser, user) })).sort((a, b) => b.match.score - a.match.score).slice(0, 3);
+  const partners = data.users
+    .filter((user) => user.id !== CURRENT_USER_ID)
+    .filter((user) => user.skillsToTeach.length > 0 || user.skillsToLearn.length > 0)
+    .map((user) => ({ user, match: getMatchPercentage(currentUser, user) }))
+    .sort((a, b) => b.match.score - a.match.score)
+    .slice(0, 3);
   return <div className="fade-up"><PageTitle eyebrow="Tuesday · your learning dashboard" title={`Good morning, ${currentUser.name.split(' ')[0]}.`} body="A little progress is still progress. Here is what is moving in your circle." action={<Link href="/discover" className="inline-flex h-10 items-center gap-2 rounded-xl bg-[hsl(var(--primary))] px-4 text-sm font-bold text-[hsl(var(--primary-foreground))]" data-testid="link-dashboard-discover"><Compass size={16} /> Discover people</Link>} />
     <section className="grid gap-4 lg:grid-cols-[1.35fr_.65fr]"><div className="relative overflow-hidden rounded-3xl bg-[hsl(var(--primary))] p-6 text-[hsl(var(--primary-foreground))] sm:p-8"><div className="relative z-10 max-w-lg"><Badge tone="gold">Your exchange energy</Badge><h2 className="mt-6 font-display text-3xl font-extrabold tracking-[-.05em] sm:text-4xl">Keep the loop going.</h2><p className="mt-3 max-w-md text-sm leading-6 opacity-75">You have skills someone needs and questions someone else can answer. Two good conversations could change this week.</p><div className="mt-7 flex gap-8"><div><p className="font-mono text-3xl font-bold">{currentUser.skillsToTeach.length}</p><p className="mt-1 text-xs opacity-65">teaching</p></div><div><p className="font-mono text-3xl font-bold">{currentUser.skillsToLearn.length}</p><p className="mt-1 text-xs opacity-65">learning</p></div><div><p className="font-mono text-3xl font-bold">{data.sessions.filter((s) => s.status === 'completed').length}</p><p className="mt-1 text-xs opacity-65">completed</p></div></div></div><div className="absolute -bottom-20 -right-10 h-64 w-64 rounded-full border-[28px] border-[hsl(var(--secondary)/.35)]" /><div className="absolute right-10 top-10 h-20 w-20 rounded-full bg-[hsl(var(--accent)/.7)]" /></div><div className="rounded-3xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-6"><div className="flex items-center justify-between"><div><p className="text-sm font-bold">Needs your attention</p><p className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">Small actions, good momentum.</p></div><MoreHorizontal size={18} className="text-[hsl(var(--muted-foreground))]" /></div><div className="mt-6 space-y-4"><Link href="/requests" className="flex items-center gap-3 rounded-xl p-2 hover:bg-[hsl(var(--muted))]" data-testid="link-dashboard-requests"><div className="rounded-xl bg-[hsl(var(--accent)/.15)] p-2 text-[hsl(var(--accent))]"><Inbox size={17} /></div><div className="min-w-0 flex-1"><p className="text-sm font-bold">{pending.length} new request{pending.length === 1 ? '' : 's'}</p><p className="truncate text-xs text-[hsl(var(--muted-foreground))]">Someone wants to learn from you</p></div><ChevronRight size={15} /></Link><Link href="/skills" className="flex items-center gap-3 rounded-xl p-2 hover:bg-[hsl(var(--muted))]" data-testid="link-dashboard-skills"><div className="rounded-xl bg-[hsl(var(--secondary)/.65)] p-2"><Library size={17} /></div><div className="min-w-0 flex-1"><p className="text-sm font-bold">Tune your skill list</p><p className="truncate text-xs text-[hsl(var(--muted-foreground))]">Make your matches sharper</p></div><ChevronRight size={15} /></Link></div></div></section>
     <section className="mt-10 grid gap-8 lg:grid-cols-[1.2fr_.8fr]"><div><div className="mb-4 flex items-end justify-between"><div><p className="font-mono text-[10px] uppercase tracking-[.18em] text-[hsl(var(--accent))]">Good chemistry</p><h2 className="mt-1 font-display text-2xl font-bold">People worth meeting</h2></div><Link href="/discover" className="text-xs font-bold text-[hsl(var(--primary))]" data-testid="link-dashboard-all-matches">View all</Link></div><div className="space-y-3">{partners.map(({ user, match }) => <PartnerRow key={user.id} user={user} score={match.score} skill={match.learn[0] || match.teach[0] || user.skillsToTeach[0]} />)}</div></div><div><div className="mb-4 flex items-end justify-between"><div><p className="font-mono text-[10px] uppercase tracking-[.18em] text-[hsl(var(--accent))]">On your calendar</p><h2 className="mt-1 font-display text-2xl font-bold">Next sessions</h2></div><Link href="/sessions" className="text-xs font-bold text-[hsl(var(--primary))]" data-testid="link-dashboard-sessions">Calendar</Link></div>{upcoming.length ? <div className="space-y-3">{upcoming.map((session) => <SessionMini key={session.id} session={session} />)}</div> : <EmptyState icon={CalendarDays} title="Nothing booked yet" body="Find a partner and make the first move." action={<Link href="/discover" className="text-sm font-bold text-[hsl(var(--primary))]" data-testid="link-dashboard-book-session">Find a partner</Link>} />}</div></section>
@@ -453,6 +458,7 @@ function DiscoverPage() {
   const matches = useMemo(() => {
     const everyoneElse = data.users
       .filter((user) => user.id !== CURRENT_USER_ID)
+      .filter((user) => user.skillsToTeach.length > 0 || user.skillsToLearn.length > 0)
       .map((user) => ({ user, match: getMatchPercentage(currentUser, user) }));
 
     const filtered = everyoneElse.filter(({ user }) => {
@@ -825,7 +831,9 @@ function SessionsPage() {
   const [time, setTime] = useState('18:30');
   const [meetingUrl, setMeetingUrl] = useState('');
   const [tab, setTab] = useState<'upcoming' | 'completed'>('upcoming');
-  const partners = data.users.filter((user) => user.id !== CURRENT_USER_ID);
+  const partners = data.users
+    .filter((user) => user.id !== CURRENT_USER_ID)
+    .filter((user) => user.skillsToTeach.length > 0 || user.skillsToLearn.length > 0);
   const sessions = data.sessions.filter((session) => session.userId === CURRENT_USER_ID && session.status === tab);
 
   useEffect(() => {
