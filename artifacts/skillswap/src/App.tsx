@@ -347,7 +347,7 @@ function AuthPage({ mode }: { mode: 'login' | 'register' }) {
       if (!session) {
         throw new Error('Could not open your SkillSwap account. Turn off Confirm email in Supabase Authentication settings and try again.');
       }
-      setCurrentUserId(session.user.id);
+      await refresh(session.user.id);
       setAuthenticated(true);
       setLoading(false);
       notify(mode === 'login' ? 'Welcome back.' : 'Your SkillSwap profile is ready.', 'success');
@@ -456,8 +456,14 @@ function DiscoverPage() {
 
   const categories = ['All', 'Technology', 'Design', 'Communication', 'Creative', 'Business'];
   const matches = useMemo(() => {
-    const everyoneElse = data.users
-      .filter((user) => user.id !== CURRENT_USER_ID)
+    const enrichedUsers = data.users.map((user) => ({
+      ...user,
+      skillsToTeach: data.skills.filter((s) => s.ownerId === user.id && s.mode === 'teach').map((s) => s.name),
+      skillsToLearn: data.skills.filter((s) => s.ownerId === user.id && s.mode === 'learn').map((s) => s.name),
+    }));
+
+    const everyoneElse = enrichedUsers
+      .filter((user) => user.id !== currentUser.id && user.id !== CURRENT_USER_ID)
       .filter((user) => user.skillsToTeach.length > 0 || user.skillsToLearn.length > 0)
       .map((user) => ({ user, match: getMatchPercentage(currentUser, user) }));
 
@@ -1006,7 +1012,7 @@ function SettingsPage() {
       notify('Could not save your profile.', 'error');
     }
   };
-  const logout = () => { setAuthenticated(false); setLocation('/login'); };
+  const logout = async () => { try { await signOut(); } catch (error) { console.error(error); } setAuthenticated(false); setLocation('/login'); };
   return <div className="fade-up"><PageTitle eyebrow="Your space, your rules" title="Settings." body="Keep your profile honest and your notifications useful." /><div className="grid gap-6 lg:grid-cols-[1fr_.7fr]"><form onSubmit={save} className="rounded-3xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-6 sm:p-8"><div className="flex items-center gap-4 border-b border-[hsl(var(--border))] pb-6"><Avatar user={currentUser} size="lg" /><div><p className="font-display text-xl font-bold">{currentUser.name}</p><p className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">{currentUser.email}</p></div></div><div className="mt-7 space-y-5"><label className="block"><span className="mb-1.5 block text-xs font-bold">Name</span><input value={name} onChange={(e) => setName(e.target.value)} className="h-11 w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-3 text-sm outline-none focus:border-[hsl(var(--primary))]" data-testid="input-settings-name" /></label><label className="block"><span className="mb-1.5 block text-xs font-bold">Short bio</span><textarea value={bio} onChange={(e) => setBio(e.target.value)} rows={4} className="w-full resize-none rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] p-3 text-sm outline-none focus:border-[hsl(var(--primary))]" data-testid="textarea-settings-bio" /></label><label className="block"><span className="mb-1.5 block text-xs font-bold">Availability</span><input value={availability} onChange={(e) => setAvailability(e.target.value)} className="h-11 w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-3 text-sm outline-none focus:border-[hsl(var(--primary))]" data-testid="input-settings-availability" /></label></div><Button type="submit" className="mt-7">Save profile</Button></form><div className="space-y-4"><div className="rounded-3xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-6"><div className="flex items-center gap-3"><Bell size={18} className="text-[hsl(var(--accent))]" /><h2 className="font-display text-lg font-bold">Notifications</h2></div><p className="mt-3 text-sm leading-6 text-[hsl(var(--muted-foreground))]">You will receive in-app updates for requests, messages, and upcoming sessions.</p><Link href="/notifications" className="mt-4 inline-flex text-sm font-bold text-[hsl(var(--primary))]" data-testid="link-settings-notifications">Review notifications <ArrowRight size={15} className="ml-1" /></Link></div><div className="rounded-3xl border border-[hsl(var(--accent)/.3)] bg-[hsl(var(--accent)/.07)] p-6"><h2 className="font-display text-lg font-bold">Live account</h2><p className="mt-2 text-sm leading-6 text-[hsl(var(--muted-foreground))]">Your profile, requests, messages, sessions, and notifications are stored in your SkillSwap account.</p></div><button onClick={logout} className="flex w-full items-center justify-center gap-2 rounded-xl border border-[hsl(var(--border))] px-4 py-3 text-sm font-bold text-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--destructive)/.3)] hover:text-[hsl(var(--destructive))]" data-testid="button-settings-logout"><LogOut size={16} /> Sign out of SkillSwap</button></div></div></div>;
 }
 
