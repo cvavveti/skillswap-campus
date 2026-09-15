@@ -1075,19 +1075,27 @@ function App() {
 
   const notify = (message: string, kind: ToastKind = 'success') => { setToast({ message, kind }); window.setTimeout(() => setToast(null), 3600); };
 
-  const currentUser = data.users.find((user) => user.id === currentUserId) || {
-    id: currentUserId,
-    name: 'Student',
-    email: '',
-    college: 'College student',
-    course: '',
-    year: '',
-    bio: '',
-    skillsToTeach: [],
-    skillsToLearn: [],
-    rating: 5,
-    availability: 'Flexible'
-  };
+  const currentUser = (() => {
+    const found = data.users.find((user) => user.id === currentUserId);
+    if (!found) return {
+      id: currentUserId,
+      name: "Student",
+      email: "",
+      college: "College student",
+      course: "",
+      year: "",
+      bio: "",
+      skillsToTeach: [],
+      skillsToLearn: [],
+      rating: 5,
+      availability: "Flexible"
+    };
+    return {
+      ...found,
+      skillsToTeach: data.skills.filter((skill) => skill.ownerId === found.id && skill.mode === "teach").map((skill) => skill.name),
+      skillsToLearn: data.skills.filter((skill) => skill.ownerId === found.id && skill.mode === "learn").map((skill) => skill.name)
+    };
+  })();
 
   if (!ready) return <PageLoading />;
 
