@@ -291,8 +291,34 @@ export const formatRelative = (value: string) => {
 };
 
 export const getMatchPercentage = (me: User, partner: User) => {
-  const teach = me.skillsToTeach.filter((skill) => partner.skillsToLearn.includes(skill));
-  const learn = me.skillsToLearn.filter((skill) => partner.skillsToTeach.includes(skill));
-  const score = Math.min(97, 56 + (teach.length + learn.length) * 10 + (me.college === partner.college ? 4 : 0));
+  const normalize = (skill: string) => skill.trim().toLowerCase();
+
+  const myTeach = me.skillsToTeach.map(normalize);
+  const myLearn = me.skillsToLearn.map(normalize);
+  const partnerTeach = partner.skillsToTeach.map(normalize);
+  const partnerLearn = partner.skillsToLearn.map(normalize);
+
+  const teach = me.skillsToTeach.filter((skill) =>
+    partnerLearn.includes(normalize(skill))
+  );
+
+  const learn = me.skillsToLearn.filter((skill) =>
+    partnerTeach.includes(normalize(skill))
+  );
+
+  const teachMatches = new Set(teach.map(normalize)).size;
+  const learnMatches = new Set(learn.map(normalize)).size;
+
+  const totalOpportunities = myTeach.length + myLearn.length;
+  const matchedOpportunities = teachMatches + learnMatches;
+
+  let score = totalOpportunities > 0
+    ? Math.round((matchedOpportunities / totalOpportunities) * 100)
+    : 0;
+
+  if (matchedOpportunities > 0 && me.college === partner.college) {
+    score = Math.min(100, score + 5);
+  }
+
   return { score, teach, learn };
 };
