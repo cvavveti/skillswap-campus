@@ -496,6 +496,10 @@ function ProfilePage() {
   const match = user.id !== CURRENT_USER_ID ? getMatchPercentage(currentUser, user) : null;
   const sendRequest = async () => {
     if (user.id === CURRENT_USER_ID) return;
+    if (data.requests.some((item) => item.senderId === CURRENT_USER_ID && item.receiverId === user.id && item.status === 'pending')) {
+      notify('You already have a request out to this person.', 'info');
+      return;
+    }
     const request = { id: makeId('req'), senderId: CURRENT_USER_ID, receiverId: user.id, status: 'pending' as const, message: `Hi ${user.name.split(' ')[0]} — I think we could make a good exchange.`, createdAt: new Date().toISOString() };
     try {
       const { getSupabase } = await import('./lib/supabase-client');
