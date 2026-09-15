@@ -1116,6 +1116,6 @@ function App() {
 
   if (!ready) return <PageLoading />;
 
-  return <StoreContext.Provider value={{ data, updateData, setLocalData, currentUser, notify, authenticated, setAuthenticated, refresh }}><WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}><Router /></WouterRouter><ToastLayer toast={toast} dismiss={() => setToast(null)} /></StoreContext.Provider>;
+  return <StoreContext.Provider value={{ data, updateData, setLocalData, currentUser, currentUserId, notify, authenticated, setAuthenticated, refresh }}><WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}><Router /></WouterRouter><ToastLayer toast={toast} dismiss={() => setToast(null)} /></StoreContext.Provider>;
 }
 export default App;
