@@ -332,7 +332,7 @@ function LandingPage() {
 
 function AuthPage({ mode }: { mode: 'login' | 'register' }) {
   const [, setLocation] = useLocation();
-  const { setAuthenticated, notify } = useStore();
+  const { setAuthenticated, notify, refresh } = useStore();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
