@@ -373,7 +373,7 @@ function DashboardPage() {
   const pending = data.requests.filter((request) => request.receiverId === CURRENT_USER_ID && request.status === 'pending');
   const upcoming = data.sessions.filter((session) => session.userId === CURRENT_USER_ID && session.status === 'upcoming').slice(0, 2);
   const partners = data.users
-    .filter((user) => user.id !== CURRENT_USER_ID)
+    .filter((user) => user.id !== currentUserId)
     .filter((user) => user.skillsToTeach.length > 0 || user.skillsToLearn.length > 0)
     .map((user) => ({ user, match: getMatchPercentage(currentUser, user) }))
     .sort((a, b) => b.match.score - a.match.score)
@@ -466,7 +466,7 @@ function DiscoverPage() {
     }));
 
     const everyoneElse = enrichedUsers
-      .filter((user) => user.id !== currentUser.id && user.id !== CURRENT_USER_ID)
+      .filter((user) => user.id !== currentUser.id && user.id !== currentUserId)
       .filter((user) => user.skillsToTeach.length > 0 || user.skillsToLearn.length > 0)
       .map((user) => ({ user, match: getMatchPercentage(currentUser, user) }));
 
@@ -481,7 +481,7 @@ function DiscoverPage() {
     return visible.sort((a, b) => b.match.score - a.match.score);
   }, [category, currentUser, data.skills, data.users, query]);
   const request = async (user: User) => {
-    if (data.requests.some((item) => item.senderId === CURRENT_USER_ID && item.receiverId === user.id && item.status === 'pending')) { notify('You already have a request out to this person.', 'info'); return; }
+    if (data.requests.some((item) => item.senderId === currentUserId && item.receiverId === user.id && item.status === 'pending')) { notify('You already have a request out to this person.', 'info'); return; }
     const { data: { user: authUser } } = await getSupabase().auth.getUser();
     if (!authUser) { notify('Please log in again.', 'error'); return; }
     const request = { id: makeId('req'), senderId: authUser.id, receiverId: user.id, status: 'pending' as const, message: `Hi ${user.name.split(' ')[0]} — I think we could make a good exchange.`, createdAt: new Date().toISOString() };
@@ -502,12 +502,12 @@ function DiscoverPage() {
 function ProfilePage() {
   const params = useParams();
   const [, setLocation] = useLocation();
-  const { currentUser, data, setLocalData, notify } = useStore();
+  const { currentUser, currentUserId, data, setLocalData, notify } = useStore();
   const user = data.users.find((item) => item.id === params.id) || currentUser;
-  const match = user.id !== CURRENT_USER_ID ? getMatchPercentage(currentUser, user) : null;
+  const match = user.id !== currentUserId ? getMatchPercentage(currentUser, user) : null;
   const sendRequest = async () => {
-    if (user.id === CURRENT_USER_ID) return;
-    if (data.requests.some((item) => item.senderId === CURRENT_USER_ID && item.receiverId === user.id && item.status === 'pending')) {
+    if (user.id === currentUserId) return;
+    if (data.requests.some((item) => item.senderId === currentUserId && item.receiverId === user.id && item.status === 'pending')) {
       notify('You already have a request out to this person.', 'info');
       return;
     }
@@ -525,11 +525,11 @@ function ProfilePage() {
       notify('Could not send the exchange request.', 'error');
     }
   };
-  return <div className="fade-up"><button onClick={() => setLocation('/discover')} className="mb-6 flex items-center gap-2 text-sm font-bold text-[hsl(var(--muted-foreground))]" data-testid="button-profile-back"><ArrowRight className="rotate-180" size={16} /> Back to discover</button><div className="overflow-hidden rounded-3xl border border-[hsl(var(--border))] bg-[hsl(var(--card))]"><div className="h-32 bg-[hsl(var(--primary))] sm:h-44"><div className="h-full w-full opacity-20" style={{ backgroundImage: 'radial-gradient(circle at 20% 30%, hsl(var(--secondary)) 0 2px, transparent 3px), radial-gradient(circle at 75% 60%, hsl(var(--accent)) 0 2px, transparent 3px)', backgroundSize: '35px 35px' }} /></div><div className="relative px-5 pb-7 sm:px-8"><div className="-mt-10 flex flex-col gap-4 sm:-mt-12 sm:flex-row sm:items-end sm:justify-between"><div className="flex items-end gap-4"><div className="rounded-3xl border-4 border-[hsl(var(--card))]"><Avatar user={user} size="lg" /></div><div className="pb-1"><h1 className="font-display text-2xl font-extrabold">{user.name}</h1><p className="text-sm text-[hsl(var(--muted-foreground))]">{user.course} · {user.year} · {user.college}</p></div></div>{user.id !== CURRENT_USER_ID ? <Button onClick={sendRequest}><UserPlus size={16} /> Send exchange request</Button> : <Button variant="outline" onClick={() => setLocation('/settings')}><Pencil size={15} /> Edit profile</Button>}</div><p className="mt-7 max-w-2xl text-sm leading-7 text-[hsl(var(--muted-foreground))]">{user.bio}</p><div className="mt-6 flex flex-wrap items-center gap-3 text-xs"><Badge tone="gold"><Star size={12} className="mr-1 fill-current" /> {user.rating} rating</Badge><Badge>{user.availability}</Badge>{match && <Badge tone="green">{match.score}% compatible</Badge>}</div></div></div><div className="mt-6 grid gap-5 lg:grid-cols-2"><div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-6"><div className="flex items-center justify-between"><h2 className="font-display text-xl font-bold">Can teach</h2><Badge tone="coral">{user.skillsToTeach.length} skills</Badge></div><div className="mt-5 space-y-3">{user.skillsToTeach.map((skill) => <div key={skill} className="flex items-center gap-3 rounded-xl bg-[hsl(var(--muted)/.65)] p-3"><div className="rounded-lg bg-[hsl(var(--primary)/.12)] p-2 text-[hsl(var(--primary))]"><BookOpen size={16} /></div><span className="text-sm font-bold">{skill}</span></div>)}</div></div><div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-6"><div className="flex items-center justify-between"><h2 className="font-display text-xl font-bold">Wants to learn</h2><Badge tone="gold">{user.skillsToLearn.length} skills</Badge></div><div className="mt-5 space-y-3">{user.skillsToLearn.map((skill) => <div key={skill} className="flex items-center gap-3 rounded-xl bg-[hsl(var(--muted)/.65)] p-3"><div className="rounded-lg bg-[hsl(var(--secondary)/.75)] p-2"><GraduationCap size={16} /></div><span className="text-sm font-bold">{skill}</span></div>)}</div></div></div></div>;
+  return <div className="fade-up"><button onClick={() => setLocation('/discover')} className="mb-6 flex items-center gap-2 text-sm font-bold text-[hsl(var(--muted-foreground))]" data-testid="button-profile-back"><ArrowRight className="rotate-180" size={16} /> Back to discover</button><div className="overflow-hidden rounded-3xl border border-[hsl(var(--border))] bg-[hsl(var(--card))]"><div className="h-32 bg-[hsl(var(--primary))] sm:h-44"><div className="h-full w-full opacity-20" style={{ backgroundImage: 'radial-gradient(circle at 20% 30%, hsl(var(--secondary)) 0 2px, transparent 3px), radial-gradient(circle at 75% 60%, hsl(var(--accent)) 0 2px, transparent 3px)', backgroundSize: '35px 35px' }} /></div><div className="relative px-5 pb-7 sm:px-8"><div className="-mt-10 flex flex-col gap-4 sm:-mt-12 sm:flex-row sm:items-end sm:justify-between"><div className="flex items-end gap-4"><div className="rounded-3xl border-4 border-[hsl(var(--card))]"><Avatar user={user} size="lg" /></div><div className="pb-1"><h1 className="font-display text-2xl font-extrabold">{user.name}</h1><p className="text-sm text-[hsl(var(--muted-foreground))]">{user.course} · {user.year} · {user.college}</p></div></div>{user.id !== currentUserId ? <Button onClick={sendRequest}><UserPlus size={16} /> Send exchange request</Button> : <Button variant="outline" onClick={() => setLocation('/settings')}><Pencil size={15} /> Edit profile</Button>}</div><p className="mt-7 max-w-2xl text-sm leading-7 text-[hsl(var(--muted-foreground))]">{user.bio}</p><div className="mt-6 flex flex-wrap items-center gap-3 text-xs"><Badge tone="gold"><Star size={12} className="mr-1 fill-current" /> {user.rating} rating</Badge><Badge>{user.availability}</Badge>{match && <Badge tone="green">{match.score}% compatible</Badge>}</div></div></div><div className="mt-6 grid gap-5 lg:grid-cols-2"><div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-6"><div className="flex items-center justify-between"><h2 className="font-display text-xl font-bold">Can teach</h2><Badge tone="coral">{user.skillsToTeach.length} skills</Badge></div><div className="mt-5 space-y-3">{user.skillsToTeach.map((skill) => <div key={skill} className="flex items-center gap-3 rounded-xl bg-[hsl(var(--muted)/.65)] p-3"><div className="rounded-lg bg-[hsl(var(--primary)/.12)] p-2 text-[hsl(var(--primary))]"><BookOpen size={16} /></div><span className="text-sm font-bold">{skill}</span></div>)}</div></div><div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-6"><div className="flex items-center justify-between"><h2 className="font-display text-xl font-bold">Wants to learn</h2><Badge tone="gold">{user.skillsToLearn.length} skills</Badge></div><div className="mt-5 space-y-3">{user.skillsToLearn.map((skill) => <div key={skill} className="flex items-center gap-3 rounded-xl bg-[hsl(var(--muted)/.65)] p-3"><div className="rounded-lg bg-[hsl(var(--secondary)/.75)] p-2"><GraduationCap size={16} /></div><span className="text-sm font-bold">{skill}</span></div>)}</div></div></div></div>;
 }
 
 function SkillsPage() {
-  const { currentUser, data, setLocalData, notify } = useStore();
+  const { currentUser, currentUserId, data, setLocalData, notify } = useStore();
   const [mode, setMode] = useState<'teach' | 'learn'>('teach');
   const [editing, setEditing] = useState<Skill | null>(null);
   const [formOpen, setFormOpen] = useState(false);
@@ -782,7 +782,7 @@ function NotesPage() {
 }
 
 function RequestsPage() {
-  const { currentUser, data, setLocalData, notify } = useStore();
+  const { currentUser, currentUserId, data, setLocalData, notify } = useStore();
   const [tab, setTab] = useState<'received' | 'sent' | 'accepted' | 'completed'>('received');
   const shown = data.requests.filter((request) => tab === 'received' ? request.receiverId === CURRENT_USER_ID && request.status === 'pending' : tab === 'sent' ? request.senderId === CURRENT_USER_ID && request.status === 'pending' : request.status === tab && (request.senderId === CURRENT_USER_ID || request.receiverId === CURRENT_USER_ID));
   const person = (request: AppData['requests'][number]) => data.users.find((user) => user.id === (request.senderId === CURRENT_USER_ID ? request.receiverId : request.senderId));
@@ -840,7 +840,7 @@ function MessagesPage() {
 }
 
 function SessionsPage() {
-  const { currentUser, data, setLocalData, notify } = useStore();
+  const { currentUser, currentUserId, data, setLocalData, notify } = useStore();
   const [showForm, setShowForm] = useState(false);
   const [skill, setSkill] = useState('');
   const [partnerId, setPartnerId] = useState('');
@@ -849,7 +849,7 @@ function SessionsPage() {
   const [meetingUrl, setMeetingUrl] = useState('');
   const [tab, setTab] = useState<'upcoming' | 'completed'>('upcoming');
   const partners = data.users
-    .filter((user) => user.id !== CURRENT_USER_ID)
+    .filter((user) => user.id !== currentUserId)
     .filter((user) => user.skillsToTeach.length > 0 || user.skillsToLearn.length > 0);
   const sessions = data.sessions.filter((session) => session.userId === CURRENT_USER_ID && session.status === tab);
 
@@ -1012,7 +1012,7 @@ function SettingsPage() {
       const { getSupabase } = await import('./lib/supabase-client');
       const { error } = await getSupabase().from('profiles').update({ full_name: name.trim(), bio, availability, updated_at: new Date().toISOString() }).eq('id', CURRENT_USER_ID);
       if (error) throw error;
-      updateData((current) => ({ ...current, users: current.users.map((user) => user.id === CURRENT_USER_ID ? { ...user, name: name.trim(), bio, availability } : user) }));
+      updateData((current) => ({ ...current, users: current.users.map((user) => user.id === currentUserId ? { ...user, name: name.trim(), bio, availability } : user) }));
       notify('Profile preferences saved.', 'success');
     } catch (error) {
       console.error('Failed to save profile:', error);
