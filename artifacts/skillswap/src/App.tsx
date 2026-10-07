@@ -404,8 +404,10 @@ function DiscoverPage() {
 
     const refreshDiscover = async () => {
       try {
-        const { getSupabase } = await import('./lib/supabase-client');
+        const { getSupabase, isSupabaseConfigured } = await import('./lib/supabase-client');
+        if (!isSupabaseConfigured()) return;
         const sb = getSupabase();
+        if (!sb) return;
 
         const { data: memberships, error } = await sb
           .from('user_skills')
@@ -482,13 +484,16 @@ function DiscoverPage() {
   }, [category, currentUser, currentUserId, data.skills, data.users, query]);
   const request = async (user: User) => {
     if (data.requests.some((item) => item.senderId === currentUserId && item.receiverId === user.id && item.status === 'pending')) { notify('You already have a request out to this person.', 'info'); return; }
-    const { data: { user: authUser } } = await getSupabase().auth.getUser();
-    if (!authUser) { notify('Please log in again.', 'error'); return; }
-    const request = { id: makeId('req'), senderId: authUser.id, receiverId: user.id, status: 'pending' as const, message: `Hi ${user.name.split(' ')[0]} — I think we could make a good exchange.`, createdAt: new Date().toISOString() };
+    const request = { id: makeId('req'), senderId: currentUserId, receiverId: user.id, status: 'pending' as const, message: `Hi ${user.name.split(' ')[0]} — I think we could make a good exchange.`, createdAt: new Date().toISOString() };
     try {
-      const { getSupabase } = await import('./lib/supabase-client');
-      const { error } = await getSupabase().from('swap_requests').insert({ id: request.id, sender_id: request.senderId, receiver_id: request.receiverId, status: request.status, message: request.message, created_at: request.createdAt });
-      if (error) throw error;
+      const { getSupabase, isSupabaseConfigured } = await import('./lib/supabase-client');
+      if (isSupabaseConfigured()) {
+        const sb = getSupabase();
+        if (sb) {
+          const { error } = await sb.from('swap_requests').insert({ id: request.id, sender_id: request.senderId, receiver_id: request.receiverId, status: request.status, message: request.message, created_at: request.createdAt });
+          if (error) throw error;
+        }
+      }
       setLocalData((current) => ({ ...current, requests: [...current.requests, request] }));
       notify(`Request sent to ${user.name.split(' ')[0]}.`, 'success');
     } catch (error) {
@@ -511,13 +516,16 @@ function ProfilePage() {
       notify('You already have a request out to this person.', 'info');
       return;
     }
-    const { data: { user: authUser } } = await getSupabase().auth.getUser();
-    if (!authUser) { notify('Please log in again.', 'error'); return; }
-    const request = { id: makeId('req'), senderId: authUser.id, receiverId: user.id, status: 'pending' as const, message: `Hi ${user.name.split(' ')[0]} — I think we could make a good exchange.`, createdAt: new Date().toISOString() };
+    const request = { id: makeId('req'), senderId: currentUserId, receiverId: user.id, status: 'pending' as const, message: `Hi ${user.name.split(' ')[0]} — I think we could make a good exchange.`, createdAt: new Date().toISOString() };
     try {
-      const { getSupabase } = await import('./lib/supabase-client');
-      const { error } = await getSupabase().from('swap_requests').insert({ id: request.id, sender_id: request.senderId, receiver_id: request.receiverId, status: request.status, message: request.message, created_at: request.createdAt });
-      if (error) throw error;
+      const { getSupabase, isSupabaseConfigured } = await import('./lib/supabase-client');
+      if (isSupabaseConfigured()) {
+        const sb = getSupabase();
+        if (sb) {
+          const { error } = await sb.from('swap_requests').insert({ id: request.id, sender_id: request.senderId, receiver_id: request.receiverId, status: request.status, message: request.message, created_at: request.createdAt });
+          if (error) throw error;
+        }
+      }
       setLocalData((current) => ({ ...current, requests: [...current.requests, request] }));
       notify(`Request sent to ${user.name.split(' ')[0]}.`, 'success');
     } catch (error) {
@@ -536,7 +544,7 @@ function SkillsPage() {
   const [name, setName] = useState('');
   const [level, setLevel] = useState<SkillLevel>('Intermediate');
   const [category, setCategory] = useState('Technology');
-  const skills = data.skills.filter((skill) => skill.ownerId === CURRENT_USER_ID && skill.mode === mode);
+  const skills = data.skills.filter((skill) => skill.ownerId === currentUserId && skill.mode === mode);
   const openAdd = () => { setEditing(null); setName(''); setFormOpen(true); };
   const openEdit = (skill: Skill) => { setEditing(skill); setName(skill.name); setLevel(skill.level); setCategory(skill.category); setFormOpen(true); };
   const saveSkill = async (event: React.FormEvent) => {
@@ -548,19 +556,21 @@ function SkillsPage() {
     }
 
     try {
-      const { getSupabase } = await import('./lib/supabase-client');
-      const sb = getSupabase();
+      const { getSupabase, isSupabaseConfigured } = await import('./lib/supabase-client');
+      const sb = isSupabaseConfigured() ? getSupabase() : null;
 
       if (editing) {
-        const { error: skillError } = await sb
-          .from('skills')
-          .update({
-            name: name.trim(),
-            category,
-          })
-          .eq('id', editing.id);
+        if (sb) {
+          const { error: skillError } = await sb
+            .from('skills')
+            .update({
+              name: name.trim(),
+              category,
+            })
+            .eq('id', editing.id);
 
-        if (skillError) throw skillError;
+          if (skillError) throw skillError;
+        }
 
         setLocalData((current) => ({
           ...current,
@@ -576,28 +586,30 @@ function SkillsPage() {
         return;
       }
 
-      const { data: existing, error: lookupError } = await sb
-        .from('skills')
-        .select('id')
-        .eq('name', name.trim())
-        .maybeSingle();
+      let skillId = makeId('skill');
 
-      if (lookupError) throw lookupError;
-
-      let skillId = existing?.id;
-
-      if (!skillId) {
-        const { data: created, error: createError } = await sb
+      if (sb) {
+        const { data: existing, error: lookupError } = await sb
           .from('skills')
-          .insert({
-            name: name.trim(),
-            category,
-          })
           .select('id')
-          .single();
+          .eq('name', name.trim())
+          .maybeSingle();
 
-        if (createError) throw createError;
-        skillId = created.id;
+        if (lookupError) throw lookupError;
+        if (existing?.id) skillId = existing.id;
+        else {
+          const { data: created, error: createError } = await sb
+            .from('skills')
+            .insert({
+              name: name.trim(),
+              category,
+            })
+            .select('id')
+            .single();
+
+          if (createError) throw createError;
+          skillId = created.id;
+        }
       }
 
       const newSkill = {
@@ -614,26 +626,28 @@ function SkillsPage() {
         mode,
       };
 
-      const { data: existingMembership, error: membershipLookupError } = await sb
-        .from('user_skills')
-        .select('id')
-        .eq('user_id', CURRENT_USER_ID)
-        .eq('skill_id', skillId)
-        .eq('skill_type', mode)
-        .maybeSingle();
-
-      if (membershipLookupError) throw membershipLookupError;
-
-      if (!existingMembership) {
-        const { error: membershipInsertError } = await sb
+      if (sb) {
+        const { data: existingMembership, error: membershipLookupError } = await sb
           .from('user_skills')
-          .insert({
-            user_id: CURRENT_USER_ID,
-            skill_id: skillId,
-            skill_type: mode,
-          });
+          .select('id')
+          .eq('user_id', currentUserId)
+          .eq('skill_id', skillId)
+          .eq('skill_type', mode)
+          .maybeSingle();
 
-        if (membershipInsertError) throw membershipInsertError;
+        if (membershipLookupError) throw membershipLookupError;
+
+        if (!existingMembership) {
+          const { error: membershipInsertError } = await sb
+            .from('user_skills')
+            .insert({
+              user_id: currentUserId,
+              skill_id: skillId,
+              skill_type: mode,
+            });
+
+          if (membershipInsertError) throw membershipInsertError;
+        }
       }
 
       setLocalData((current) => ({
@@ -641,7 +655,7 @@ function SkillsPage() {
         skills: [
           ...current.skills.filter(
             (skill) =>
-              !(skill.ownerId === CURRENT_USER_ID && skill.name.toLowerCase() === name.trim().toLowerCase() && skill.mode === mode)
+              !(skill.ownerId === currentUserId && skill.name.toLowerCase() === name.trim().toLowerCase() && skill.mode === mode)
           ),
           newSkill,
         ],
@@ -657,20 +671,22 @@ function SkillsPage() {
 
   const deleteSkill = async (id: string) => {
     try {
-      const { getSupabase } = await import('./lib/supabase-client');
-      const sb = getSupabase();
+      const { getSupabase, isSupabaseConfigured } = await import('./lib/supabase-client');
+      const sb = isSupabaseConfigured() ? getSupabase() : null;
       const skill = data.skills.find((item) => item.id === id);
 
       if (!skill) return;
 
-      const { error } = await sb
-        .from('user_skills')
-        .delete()
-        .eq('user_id', CURRENT_USER_ID)
-        .eq('skill_id', skill.id)
-        .eq('skill_type', skill.mode);
+      if (sb) {
+        const { error } = await sb
+          .from('user_skills')
+          .delete()
+          .eq('user_id', currentUserId)
+          .eq('skill_id', skill.id)
+          .eq('skill_type', skill.mode);
 
-      if (error) throw error;
+        if (error) throw error;
+      }
 
       setLocalData((current) => ({
         ...current,
@@ -717,8 +733,8 @@ const uploadNote = async (event: React.FormEvent) => {
     return;
   }
 
-  if (file.size > 10_000_000) {
-    notify('Keep demo uploads under 10 MB so they can be saved.', 'error');
+  if (file.size > 30_000_000) {
+    notify('Keep demo uploads under 30 MB so they can be saved.', 'error');
     return;
   }
 
@@ -746,22 +762,27 @@ const uploadNote = async (event: React.FormEvent) => {
     };
 
     try {
-      const { error } = await getSupabase().from('notes').insert({
-        id: note.id,
-        title: note.title,
-        subject: note.subject,
-        description: note.description,
-        file_name: note.fileName,
-        file_type: note.fileType,
-        file_size: note.fileSize,
-        file_data: note.fileData,
-        uploaded_at: note.uploadedAt,
-        owner_id: currentUserId,
-      });
+      const { getSupabase, isSupabaseConfigured } = await import('./lib/supabase-client');
+      if (isSupabaseConfigured()) {
+        const sb = getSupabase();
+        if (sb) {
+          const { error } = await sb.from('notes').insert({
+            id: note.id,
+            title: note.title,
+            subject: note.subject,
+            description: note.description,
+            file_name: note.fileName,
+            file_type: note.fileType,
+            file_size: note.fileSize,
+            file_data: note.fileData,
+            uploaded_at: note.uploadedAt,
+            owner_id: currentUserId,
+          });
+          if (error) throw error;
+        }
+      }
 
-      if (error) throw error;
       updateData((current) => ({
-
         ...current,
         notes: [note, ...current.notes],
       }));
@@ -804,7 +825,7 @@ const uploadNote = async (event: React.FormEvent) => {
     <div className="mb-8 grid gap-4 md:grid-cols-3">
       <div className="rounded-2xl bg-[hsl(var(--primary))] p-5 text-[hsl(var(--primary-foreground))]"><FileText size={21} /><p className="mt-7 font-mono text-3xl font-bold">{notes.length}</p><p className="mt-1 text-sm opacity-75">notes in your library</p></div>
       <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-5"><BookOpen size={21} className="text-[hsl(var(--accent))]" /><p className="mt-7 font-mono text-3xl font-bold">{new Set(notes.map((note) => note.subject)).size}</p><p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">subjects covered</p></div>
-      <div className="rounded-2xl bg-[hsl(var(--secondary))] p-5"><HeartHandshake size={21} /><p className="mt-7 font-mono text-3xl font-bold">10 MB</p><p className="mt-1 text-sm text-[hsl(var(--foreground)/.65)]">max demo upload size</p></div>
+      <div className="rounded-2xl bg-[hsl(var(--secondary))] p-5"><HeartHandshake size={21} /><p className="mt-7 font-mono text-3xl font-bold">30 MB</p><p className="mt-1 text-sm text-[hsl(var(--foreground)/.65)]">max demo upload size</p></div>
     </div>
     {showForm && <form onSubmit={uploadNote} className="mb-8 rounded-3xl border border-[hsl(var(--primary)/.3)] bg-[hsl(var(--card))] p-5 shadow-lg sm:p-7">
       <div className="flex items-start justify-between gap-4"><div><p className="font-mono text-[10px] uppercase tracking-[.18em] text-[hsl(var(--accent))]">Add to your shelf</p><h2 className="mt-2 font-display text-2xl font-bold">Upload a useful note</h2></div><button type="button" onClick={resetForm} aria-label="Close upload form" data-testid="button-close-note-form"><X size={18} /></button></div>
@@ -812,7 +833,7 @@ const uploadNote = async (event: React.FormEvent) => {
         <label><span className="mb-1.5 block text-xs font-bold">Note title</span><input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="e.g. SQL joins, explained simply" className="h-11 w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-3 text-sm outline-none focus:border-[hsl(var(--primary))]" data-testid="input-note-title" /></label>
         <label><span className="mb-1.5 block text-xs font-bold">Subject</span><select value={subject} onChange={(event) => setSubject(event.target.value)} className="h-11 w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-3 text-sm" data-testid="select-note-subject"><option>React</option><option>Data Analysis</option><option>Presentation</option><option>Design</option><option>Business</option><option>Other</option></select></label>
         <label className="sm:col-span-2"><span className="mb-1.5 block text-xs font-bold">Short description <span className="font-normal text-[hsl(var(--muted-foreground))]">(optional)</span></span><textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={3} placeholder="What will someone learn from this file?" className="w-full resize-none rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] p-3 text-sm outline-none focus:border-[hsl(var(--primary))]" data-testid="textarea-note-description" /></label>
-        <label className="sm:col-span-2"><span className="mb-1.5 block text-xs font-bold">File</span><div className="flex flex-col gap-3 rounded-2xl border border-dashed border-[hsl(var(--border))] bg-[hsl(var(--muted)/.55)] p-4 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3"><div className="rounded-xl bg-[hsl(var(--card))] p-2.5 text-[hsl(var(--primary))]"><Upload size={18} /></div><div><p className="text-sm font-bold">{file ? file.name : 'Choose a note file'}</p><p className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">PDF, Word, PowerPoint, text, or image · up to 10 MB</p></div></div><label className="inline-flex h-10 cursor-pointer items-center justify-center rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] px-4 text-xs font-bold hover:bg-[hsl(var(--background))]"><span>{file ? 'Change file' : 'Choose file'}</span><input type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.md,.png,.jpg,.jpeg" className="sr-only" onChange={(event) => setFile(event.target.files?.[0] || null)} data-testid="input-note-file" /></label></div></label>
+        <label className="sm:col-span-2"><span className="mb-1.5 block text-xs font-bold">File</span><div className="flex flex-col gap-3 rounded-2xl border border-dashed border-[hsl(var(--border))] bg-[hsl(var(--muted)/.55)] p-4 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3"><div className="rounded-xl bg-[hsl(var(--card))] p-2.5 text-[hsl(var(--primary))]"><Upload size={18} /></div><div><p className="text-sm font-bold">{file ? file.name : 'Choose a note file'}</p><p className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">PDF, Word, PowerPoint, text, or image · up to 30 MB</p></div></div><label className="inline-flex h-10 cursor-pointer items-center justify-center rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] px-4 text-xs font-bold hover:bg-[hsl(var(--background))]"><span>{file ? 'Change file' : 'Choose file'}</span><input type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.md,.png,.jpg,.jpeg" className="sr-only" onChange={(event) => setFile(event.target.files?.[0] || null)} data-testid="input-note-file" /></label></div></label>
       </div>
       <div className="mt-6 flex justify-end gap-2"><Button variant="quiet" onClick={resetForm}>Cancel</Button><Button type="submit"><Upload size={15} /> Save notes</Button></div>
     </form>}
@@ -827,9 +848,14 @@ function RequestsPage() {
   const person = (request: AppData['requests'][number]) => data.users.find((user) => user.id === (request.senderId === currentUserId ? request.receiverId : request.senderId));
   const changeStatus = async (id: string, status: RequestStatus) => {
     try {
-      const { getSupabase } = await import('./lib/supabase-client');
-      const { error } = await getSupabase().from('swap_requests').update({ status }).eq('id', id);
-      if (error) throw error;
+      const { getSupabase, isSupabaseConfigured } = await import('./lib/supabase-client');
+      if (isSupabaseConfigured()) {
+        const sb = getSupabase();
+        if (sb) {
+          const { error } = await sb.from('swap_requests').update({ status }).eq('id', id);
+          if (error) throw error;
+        }
+      }
       setLocalData((current) => ({ ...current, requests: current.requests.map((item) => item.id === id ? { ...item, status } : item) }));
       notify(status === 'accepted' ? 'Request accepted. Your conversation is ready.' : `Request ${status}.`, status === 'rejected' ? 'info' : 'success');
     } catch (error) {
@@ -841,14 +867,14 @@ function RequestsPage() {
 }
 
 function MessagesPage() {
-  const { currentUser, data, updateData, setLocalData, notify } = useStore();
+  const { currentUser, currentUserId, data, updateData, setLocalData, notify } = useStore();
   const conversations = useMemo(() => Array.from(new Set(data.messages.map((message) => message.conversationId))).map((id) => {
     const messages = data.messages.filter((message) => message.conversationId === id);
-    const otherFromMessages = messages.find((message) => message.senderId !== CURRENT_USER_ID)?.senderId;
-    const acceptedRequest = data.requests.find((request) => request.status === 'accepted' && (request.senderId === CURRENT_USER_ID || request.receiverId === CURRENT_USER_ID));
-    const otherId = otherFromMessages || (acceptedRequest ? (acceptedRequest.senderId === CURRENT_USER_ID ? acceptedRequest.receiverId : acceptedRequest.senderId) : undefined);
+    const otherFromMessages = messages.find((message) => message.senderId !== currentUserId)?.senderId;
+    const acceptedRequest = data.requests.find((request) => request.status === 'accepted' && (request.senderId === currentUserId || request.receiverId === currentUserId));
+    const otherId = otherFromMessages || (acceptedRequest ? (acceptedRequest.senderId === currentUserId ? acceptedRequest.receiverId : acceptedRequest.senderId) : undefined);
     return { id, messages, user: data.users.find((user) => user.id === otherId) };
-  }).filter((item) => item.user), [data.messages, data.users, data.requests]);
+  }).filter((item) => item.user), [data.messages, data.users, data.requests, currentUserId]);
   const [selected, setSelected] = useState(conversations[0]?.id || '');
   const [body, setBody] = useState('');
   const active = conversations.find((conversation) => conversation.id === selected) || conversations[0];
@@ -856,26 +882,45 @@ function MessagesPage() {
   const send = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!body.trim() || !active) return;
-    const message = { id: makeId('msg'), conversationId: active.id, senderId: CURRENT_USER_ID, body: body.trim(), createdAt: new Date().toISOString() };
+    const text = body.trim();
+    const message = { id: makeId('msg'), conversationId: active.id, senderId: currentUserId, body: text, createdAt: new Date().toISOString() };
     try {
-      const { getSupabase } = await import('./lib/supabase-client');
-      const { error } = await getSupabase().from('messages').insert({
-        id: message.id,
-        conversation_id: message.conversationId,
-        sender_id: message.senderId,
-        content: message.body,
-        created_at: message.createdAt,
-      });
-      if (error) throw error;
+      const { getSupabase, isSupabaseConfigured } = await import('./lib/supabase-client');
+      if (isSupabaseConfigured()) {
+        const sb = getSupabase();
+        if (sb) {
+          const { error } = await sb.from('messages').insert({
+            id: message.id,
+            conversation_id: message.conversationId,
+            sender_id: message.senderId,
+            content: message.body,
+            created_at: message.createdAt,
+          });
+          if (error) throw error;
+        }
+      }
       setLocalData((current) => ({ ...current, messages: [...current.messages, message] }));
       setBody('');
       notify('Message sent.', 'success');
+
+      if (!isSupabaseConfigured() && active.user) {
+        const partner = active.user;
+        const inputLower = text.toLowerCase();
+        let replyText = `Hey ${currentUser.name.split(' ')[0]}! Great to hear from you. I'd love to swap notes on this! When are you free to connect?`;
+        if (inputLower.includes('hi') || inputLower.includes('hello') || inputLower.includes('hey')) {
+          replyText = `Hey ${currentUser.name.split(' ')[0]}! Thanks for reaching out. Ready to trade skills this week?`;
+        }
+        setTimeout(() => {
+          const replyMsg = { id: makeId('msg'), conversationId: active.id, senderId: partner.id, body: replyText, createdAt: new Date().toISOString() };
+          setLocalData((current) => ({ ...current, messages: [...current.messages, replyMsg] }));
+        }, 1200);
+      }
     } catch (error) {
       console.error('Failed to send message:', error);
       notify('Could not send the message.', 'error');
     }
   };
-  return <div className="fade-up"><PageTitle eyebrow="The good part of networking" title="Messages." body="Keep the conversation human, specific, and easy to pick back up." action={<Link href="/discover" className="inline-flex h-10 items-center gap-2 rounded-xl bg-[hsl(var(--primary))] px-4 text-sm font-bold text-[hsl(var(--primary-foreground))]" data-testid="link-messages-find"><UserPlus size={15} /> New conversation</Link>} /><div className="grid min-h-[560px] overflow-hidden rounded-3xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] md:grid-cols-[260px_1fr]">{conversations.length ? <><div className="border-b border-[hsl(var(--border))] md:border-b-0 md:border-r"><div className="border-b border-[hsl(var(--border))] p-4"><div className="relative"><Search size={15} className="absolute left-3 top-3 text-[hsl(var(--muted-foreground))]" /><input placeholder="Search messages" className="h-9 w-full rounded-lg bg-[hsl(var(--muted))] pl-9 pr-3 text-xs outline-none" data-testid="input-message-search" /></div></div><div className="flex overflow-x-auto p-2 md:block">{conversations.map((conversation) => <button key={conversation.id} onClick={() => setSelected(conversation.id)} className={classNames('flex min-w-[170px] items-center gap-2 rounded-xl p-3 text-left hover:bg-[hsl(var(--muted))] md:w-full', active?.id === conversation.id && 'bg-[hsl(var(--muted))]')} data-testid={`button-conversation-${conversation.id}`}><Avatar user={conversation.user} size="sm" /><div className="min-w-0"><p className="truncate text-sm font-bold">{conversation.user?.name}</p><p className="truncate text-[11px] text-[hsl(var(--muted-foreground))]">{conversation.messages.at(-1)?.body}</p></div></button>)}</div></div>{active && <div className="flex min-h-[430px] flex-col"><div className="flex items-center gap-3 border-b border-[hsl(var(--border))] p-4"><Avatar user={active.user} size="sm" /><div><p className="text-sm font-bold">{active.user?.name}</p><p className="text-xs text-[hsl(var(--muted-foreground))]">Available {active.user?.availability.toLowerCase()}</p></div><Link href={`/profile/${active.user?.id}`} className="ml-auto rounded-lg p-2 text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))]" data-testid="link-message-profile"><ExternalLink size={16} /></Link></div><div className="flex-1 space-y-3 overflow-y-auto p-5">{active.messages.map((message) => <div key={message.id} className={classNames('flex', message.senderId === CURRENT_USER_ID ? 'justify-end' : 'justify-start')}><div className={classNames('max-w-[78%] rounded-2xl px-4 py-3 text-sm leading-6', message.senderId === CURRENT_USER_ID ? 'rounded-br-sm bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]' : 'rounded-bl-sm bg-[hsl(var(--muted))]')}><p>{message.body}</p><p className={classNames('mt-1 text-[10px]', message.senderId === CURRENT_USER_ID ? 'opacity-60' : 'text-[hsl(var(--muted-foreground))]')}>{formatRelative(message.createdAt)}</p></div></div>)}</div><form onSubmit={send} className="flex gap-2 border-t border-[hsl(var(--border))] p-4"><input value={body} onChange={(e) => setBody(e.target.value)} placeholder={`Write to ${active.user?.name.split(' ')[0]}…`} className="h-11 min-w-0 flex-1 rounded-xl bg-[hsl(var(--muted))] px-4 text-sm outline-none focus:ring-2 focus:ring-[hsl(var(--primary)/.2)]" data-testid="input-message-body" /><Button type="submit" className="h-11 w-11 px-0" aria-label="Send message"><Send size={16} /></Button></form></div>}</> : <div className="col-span-full p-5"><EmptyState icon={MessageCircle} title="No conversations yet" body="Find a partner whose skills complement yours, then start with one specific question." action={<Link href="/discover" className="text-sm font-bold text-[hsl(var(--primary))]" data-testid="link-empty-messages">Find a partner</Link>} /></div>}</div></div>;
+  return <div className="fade-up"><PageTitle eyebrow="The good part of networking" title="Messages." body="Keep the conversation human, specific, and easy to pick back up." action={<Link href="/discover" className="inline-flex h-10 items-center gap-2 rounded-xl bg-[hsl(var(--primary))] px-4 text-sm font-bold text-[hsl(var(--primary-foreground))]" data-testid="link-messages-find"><UserPlus size={15} /> New conversation</Link>} /><div className="grid min-h-[560px] overflow-hidden rounded-3xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] md:grid-cols-[260px_1fr]">{conversations.length ? <><div className="border-b border-[hsl(var(--border))] md:border-b-0 md:border-r"><div className="border-b border-[hsl(var(--border))] p-4"><div className="relative"><Search size={15} className="absolute left-3 top-3 text-[hsl(var(--muted-foreground))]" /><input placeholder="Search messages" className="h-9 w-full rounded-lg bg-[hsl(var(--muted))] pl-9 pr-3 text-xs outline-none" data-testid="input-message-search" /></div></div><div className="flex overflow-x-auto p-2 md:block">{conversations.map((conversation) => <button key={conversation.id} onClick={() => setSelected(conversation.id)} className={classNames('flex min-w-[170px] items-center gap-2 rounded-xl p-3 text-left hover:bg-[hsl(var(--muted))] md:w-full', active?.id === conversation.id && 'bg-[hsl(var(--muted))]')} data-testid={`button-conversation-${conversation.id}`}><Avatar user={conversation.user} size="sm" /><div className="min-w-0"><p className="truncate text-sm font-bold">{conversation.user?.name}</p><p className="truncate text-[11px] text-[hsl(var(--muted-foreground))]">{conversation.messages.at(-1)?.body}</p></div></button>)}</div></div>{active && <div className="flex min-h-[430px] flex-col"><div className="flex items-center gap-3 border-b border-[hsl(var(--border))] p-4"><Avatar user={active.user} size="sm" /><div><p className="text-sm font-bold">{active.user?.name}</p><p className="text-xs text-[hsl(var(--muted-foreground))]">Available {active.user?.availability.toLowerCase()}</p></div><Link href={`/profile/${active.user?.id}`} className="ml-auto rounded-lg p-2 text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))]" data-testid="link-message-profile"><ExternalLink size={16} /></Link></div><div className="flex-1 space-y-3 overflow-y-auto p-5">{active.messages.map((message) => <div key={message.id} className={classNames('flex', message.senderId === currentUserId ? 'justify-end' : 'justify-start')}><div className={classNames('max-w-[78%] rounded-2xl px-4 py-3 text-sm leading-6', message.senderId === currentUserId ? 'rounded-br-sm bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]' : 'rounded-bl-sm bg-[hsl(var(--muted))]')}><p>{message.body}</p><p className={classNames('mt-1 text-[10px]', message.senderId === currentUserId ? 'opacity-60' : 'text-[hsl(var(--muted-foreground))]')}>{formatRelative(message.createdAt)}</p></div></div>)}</div><form onSubmit={send} className="flex gap-2 border-t border-[hsl(var(--border))] p-4"><input value={body} onChange={(e) => setBody(e.target.value)} placeholder={`Write to ${active.user?.name.split(' ')[0]}…`} className="h-11 min-w-0 flex-1 rounded-xl bg-[hsl(var(--muted))] px-4 text-sm outline-none focus:ring-2 focus:ring-[hsl(var(--primary)/.2)]" data-testid="input-message-body" /><Button type="submit" className="h-11 w-11 px-0" aria-label="Send message"><Send size={16} /></Button></form></div>}</> : <div className="col-span-full p-5"><EmptyState icon={MessageCircle} title="No conversations yet" body="Find a partner whose skills complement yours, then start with one specific question." action={<Link href="/discover" className="text-sm font-bold text-[hsl(var(--primary))]" data-testid="link-empty-messages">Find a partner</Link>} /></div>}</div></div>;
 }
 
 function SessionsPage() {
@@ -890,7 +935,7 @@ function SessionsPage() {
   const partners = data.users
     .filter((user) => user.id !== currentUserId)
     .filter((user) => user.skillsToTeach.length > 0 || user.skillsToLearn.length > 0);
-  const sessions = data.sessions.filter((session) => session.userId === CURRENT_USER_ID && session.status === tab);
+  const sessions = data.sessions.filter((session) => (session.userId === currentUserId || session.partnerId === currentUserId) && session.status === tab);
 
   useEffect(() => {
     if (!partnerId && partners[0]) setPartnerId(partners[0].id);
@@ -905,21 +950,26 @@ function SessionsPage() {
     if (!meetingUrl.trim()) { notify('Add the meeting link for your session.', 'error'); return; }
     const sessionId = makeId('session');
     const scheduledAt = new Date(`${date}T${time || '18:30'}:00`).toISOString();
-    const session: AppData['sessions'][number] = { id: sessionId, userId: CURRENT_USER_ID, partnerId, skill: skill.trim(), date, time: time || '18:30', duration: '45 min', type: 'Video call', status: 'upcoming', meetingUrl: meetingUrl.trim() };
+    const session: AppData['sessions'][number] = { id: sessionId, userId: currentUserId, partnerId, skill: skill.trim(), date, time: time || '18:30', duration: '45 min', type: 'Video call', status: 'upcoming', meetingUrl: meetingUrl.trim() };
     try {
-      const { getSupabase } = await import('./lib/supabase-client');
-      const { error } = await getSupabase().from('sessions').insert({
-        id: sessionId,
-        host_id: CURRENT_USER_ID,
-        participant_id: partnerId,
-        title: session.skill,
-        description: `SkillSwap session with ${data.users.find((u) => u.id === partnerId)?.name || 'your partner'}.`,
-        scheduled_at: scheduledAt,
-        duration_minutes: 45,
-        meeting_url: session.meetingUrl,
-        status: 'upcoming',
-      });
-      if (error) throw error;
+      const { getSupabase, isSupabaseConfigured } = await import('./lib/supabase-client');
+      if (isSupabaseConfigured()) {
+        const sb = getSupabase();
+        if (sb) {
+          const { error } = await sb.from('sessions').insert({
+            id: sessionId,
+            host_id: currentUserId,
+            participant_id: partnerId,
+            title: session.skill,
+            description: `SkillSwap session with ${data.users.find((u) => u.id === partnerId)?.name || 'your partner'}.`,
+            scheduled_at: scheduledAt,
+            duration_minutes: 45,
+            meeting_url: session.meetingUrl,
+            status: 'upcoming',
+          });
+          if (error) throw error;
+        }
+      }
       setLocalData((current) => ({ ...current, sessions: [...current.sessions, session] }));
       setShowForm(false);
       setMeetingUrl('');
@@ -932,9 +982,14 @@ function SessionsPage() {
 
   const change = async (id: string, status: 'cancelled' | 'completed') => {
     try {
-      const { getSupabase } = await import('./lib/supabase-client');
-      const { error } = await getSupabase().from('sessions').update({ status }).eq('id', id);
-      if (error) throw error;
+      const { getSupabase, isSupabaseConfigured } = await import('./lib/supabase-client');
+      if (isSupabaseConfigured()) {
+        const sb = getSupabase();
+        if (sb) {
+          const { error } = await sb.from('sessions').update({ status }).eq('id', id);
+          if (error) throw error;
+        }
+      }
       setLocalData((current) => ({ ...current, sessions: current.sessions.map((session) => session.id === id ? { ...session, status } : session) }));
       notify(status === 'cancelled' ? 'Session cancelled.' : 'Session marked complete.', 'info');
     } catch (error) {
@@ -951,9 +1006,14 @@ function SessionsPage() {
     const nextDate = next.toISOString().slice(0, 10);
     const nextScheduledAt = next.toISOString();
     try {
-      const { getSupabase } = await import('./lib/supabase-client');
-      const { error } = await getSupabase().from('sessions').update({ scheduled_at: nextScheduledAt }).eq('id', id);
-      if (error) throw error;
+      const { getSupabase, isSupabaseConfigured } = await import('./lib/supabase-client');
+      if (isSupabaseConfigured()) {
+        const sb = getSupabase();
+        if (sb) {
+          const { error } = await sb.from('sessions').update({ scheduled_at: nextScheduledAt }).eq('id', id);
+          if (error) throw error;
+        }
+      }
       setLocalData((current) => ({ ...current, sessions: current.sessions.map((item) => item.id === id ? { ...item, date: nextDate } : item) }));
       notify('Session moved one day later.', 'success');
     } catch (error) {
@@ -967,7 +1027,7 @@ function SessionsPage() {
 
 
 function FeedbackPage() {
-  const { data, updateData, notify } = useStore();
+  const { currentUserId, data, updateData, notify } = useStore();
   const finished = data.sessions.filter((session) => session.status === 'completed');
   const [selectedId, setSelectedId] = useState(finished.find((session) => !data.feedback.some((item) => item.sessionId === session.id))?.id || '');
   const [rating, setRating] = useState(5);
@@ -979,17 +1039,22 @@ function FeedbackPage() {
     if (!selectedId) return;
     const feedback = { id: makeId('feedback'), sessionId: selectedId, rating, comment, tags, createdAt: new Date().toISOString() };
     try {
-      const { getSupabase } = await import('./lib/supabase-client');
-      const { error } = await getSupabase().from('feedback').insert({
-        id: feedback.id,
-        session_id: feedback.sessionId,
-        user_id: CURRENT_USER_ID,
-        rating: feedback.rating,
-        comment: feedback.comment,
-        tags: feedback.tags,
-        created_at: feedback.createdAt,
-      });
-      if (error) throw error;
+      const { getSupabase, isSupabaseConfigured } = await import('./lib/supabase-client');
+      if (isSupabaseConfigured()) {
+        const sb = getSupabase();
+        if (sb) {
+          const { error } = await sb.from('feedback').insert({
+            id: feedback.id,
+            session_id: feedback.sessionId,
+            user_id: currentUserId,
+            rating: feedback.rating,
+            comment: feedback.comment,
+            tags: feedback.tags,
+            created_at: feedback.createdAt,
+          });
+          if (error) throw error;
+        }
+      }
       updateData((current) => ({ ...current, feedback: [...current.feedback, feedback] }));
       notify('Feedback shared. Thanks for closing the loop.', 'success');
       setSelectedId(''); setComment(''); setTags([]);
@@ -1002,20 +1067,30 @@ function FeedbackPage() {
 }
 
 function NotificationsPage() {
-  const { data, updateData, notify } = useStore();
+  const { currentUserId, data, updateData, notify } = useStore();
   const markRead = async (id: string) => {
     try {
-      const { getSupabase } = await import('./lib/supabase-client');
-      const { error } = await getSupabase().from('notifications').update({ read: true }).eq('id', id).eq('user_id', CURRENT_USER_ID);
-      if (error) throw error;
+      const { getSupabase, isSupabaseConfigured } = await import('./lib/supabase-client');
+      if (isSupabaseConfigured()) {
+        const sb = getSupabase();
+        if (sb) {
+          const { error } = await sb.from('notifications').update({ read: true }).eq('id', id).eq('user_id', currentUserId);
+          if (error) throw error;
+        }
+      }
       updateData((current) => ({ ...current, notifications: current.notifications.map((item) => item.id === id ? { ...item, read: true } : item) }));
     } catch (error) { console.error('Failed to mark notification read:', error); }
   };
   const markAll = async () => {
     try {
-      const { getSupabase } = await import('./lib/supabase-client');
-      const { error } = await getSupabase().from('notifications').update({ read: true }).eq('user_id', CURRENT_USER_ID).eq('read', false);
-      if (error) throw error;
+      const { getSupabase, isSupabaseConfigured } = await import('./lib/supabase-client');
+      if (isSupabaseConfigured()) {
+        const sb = getSupabase();
+        if (sb) {
+          const { error } = await sb.from('notifications').update({ read: true }).eq('user_id', currentUserId).eq('read', false);
+          if (error) throw error;
+        }
+      }
       updateData((current) => ({ ...current, notifications: current.notifications.map((item) => ({ ...item, read: true })) }));
       notify('All notifications marked as read.', 'success');
     } catch (error) { console.error('Failed to mark notifications read:', error); notify('Could not update notifications.', 'error'); }
@@ -1048,9 +1123,14 @@ function SettingsPage() {
   const save = async (event: React.FormEvent) => {
     event.preventDefault();
     try {
-      const { getSupabase } = await import('./lib/supabase-client');
-      const { error } = await getSupabase().from('profiles').update({ full_name: name.trim(), bio, availability, updated_at: new Date().toISOString() }).eq('id', CURRENT_USER_ID);
-      if (error) throw error;
+      const { getSupabase, isSupabaseConfigured } = await import('./lib/supabase-client');
+      if (isSupabaseConfigured()) {
+        const sb = getSupabase();
+        if (sb) {
+          const { error } = await sb.from('profiles').update({ full_name: name.trim(), bio, availability, updated_at: new Date().toISOString() }).eq('id', CURRENT_USER_ID);
+          if (error) throw error;
+        }
+      }
       updateData((current) => ({ ...current, users: current.users.map((user) => user.id === currentUser.id ? { ...user, name: name.trim(), bio, availability } : user) }));
       notify('Profile preferences saved.', 'success');
     } catch (error) {

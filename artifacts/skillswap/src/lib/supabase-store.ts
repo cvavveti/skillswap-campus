@@ -9,7 +9,8 @@ import type {
   Skill,
   User,
 } from './skillswap-data';
-import { getSupabase } from './supabase-client';
+import { loadData, saveData } from './skillswap-data';
+import { getSupabase, isSupabaseConfigured } from './supabase-client';
 
 const emptyData = (): AppData => ({
   users: [], skills: [], requests: [], messages: [], sessions: [], feedback: [], notifications: [], notes: [],
@@ -31,19 +32,50 @@ const profileToUser = (row: any): User => ({
 });
 
 export async function getSession() {
-  const { data, error } = await getSupabase().auth.getSession();
+  if (!isSupabaseConfigured()) return null;
+  const sb = getSupabase();
+  if (!sb) return null;
+  const { data, error } = await sb.auth.getSession();
   if (error) throw error;
   return data.session;
 }
 
 export async function signIn(email: string, password: string) {
-  const { data, error } = await getSupabase().auth.signInWithPassword({ email, password });
+  if (!isSupabaseConfigured()) {
+    const data = loadData();
+    const existing = data.users.find((u) => u.email.toLowerCase() === email.toLowerCase());
+    const user = existing || data.users[0];
+    return { user: { id: user ? user.id : 'alex-morgan-1' } };
+  }
+  const sb = getSupabase();
+  if (!sb) throw new Error('Supabase client not available.');
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
   if (error) throw error;
   return data.session;
 }
 
 export async function signUp(name: string, email: string, password: string) {
+  if (!isSupabaseConfigured()) {
+    const data = loadData();
+    const newUser: User = {
+      id: `user-${Date.now()}`,
+      name,
+      email,
+      college: 'Campus Community',
+      course: 'General Student',
+      year: '1st Year',
+      bio: 'Ready to share and learn skills!',
+      skillsToTeach: [],
+      skillsToLearn: [],
+      rating: 5,
+      availability: 'Flexible',
+    };
+    data.users.push(newUser);
+    saveData(data);
+    return { user: { id: newUser.id } };
+  }
   const sb = getSupabase();
+  if (!sb) throw new Error('Supabase client not available.');
 
   const { data, error } = await sb.auth.signUp({
     email,
@@ -93,12 +125,19 @@ export async function signUp(name: string, email: string, password: string) {
 }
 
 export async function signOut() {
-  const { error } = await getSupabase().auth.signOut();
+  if (!isSupabaseConfigured()) return;
+  const sb = getSupabase();
+  if (!sb) return;
+  const { error } = await sb.auth.signOut();
   if (error) throw error;
 }
 
 export async function loadRemoteData(userId: string): Promise<AppData> {
+  if (!isSupabaseConfigured()) {
+    return loadData();
+  }
   const sb = getSupabase();
+  if (!sb) return loadData();
   const result = emptyData();
 
   const [profiles, skills, userSkills, requests, sessions, notifications, notes, feedback, memberships] = await Promise.all([
@@ -194,7 +233,9 @@ async function deleteMissing(sb: any, table: string, before: any[], after: any[]
 }
 
 export async function syncAppData(next: AppData, before: AppData, currentUserId: string) {
+  if (!isSupabaseConfigured()) return;
   const sb = getSupabase();
+  if (!sb) return;
 
   const me = next.users.find(u => u.id === currentUserId);
   if (me) {
@@ -290,7 +331,9 @@ export async function syncAppData(next: AppData, before: AppData, currentUserId:
 }
 
 export async function createConversationForUsers(userA: string, userB: string) {
+  if (!isSupabaseConfigured()) return `conv-${userA}-${userB}`;
   const sb = getSupabase();
+  if (!sb) return `conv-${userA}-${userB}`;
   const { data: existingMembers, error: existingError } = await sb.from('conversation_members').select('conversation_id').eq('user_id', userA);
   if (existingError) throw existingError;
   for (const row of existingMembers || []) {
@@ -308,7 +351,9 @@ export async function createConversationForUsers(userA: string, userB: string) {
 }
 
 export async function acceptRequestExtras(request: Request, receiverName: string) {
+  if (!isSupabaseConfigured()) return;
   const sb = getSupabase();
+  if (!sb) return;
   const a = request.senderId < request.receiverId ? request.senderId : request.receiverId;
   const b = request.senderId < request.receiverId ? request.receiverId : request.senderId;
   await sb.from('connections').upsert({ user_a_id: a, user_b_id: b }, { onConflict: 'user_a_id,user_b_id' });
@@ -318,7 +363,9 @@ export async function acceptRequestExtras(request: Request, receiverName: string
 }
 
 export function subscribeToRealtime(userId: string, onChange: () => void) {
+  if (!isSupabaseConfigured()) return () => {};
   const sb = getSupabase();
+  if (!sb) return () => {};
   const channel = sb.channel(`skillswap-${userId}`)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, onChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'swap_requests' }, onChange)
