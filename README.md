@@ -45,7 +45,7 @@ skillswap-campus/
 
 ---
 
-## 🚀 Quick Start Guide
+## 🚀 Quick Start Guide & Starting Commands
 
 ### Prerequisites
 - [Node.js](https://nodejs.org/) (v20+ recommended)
@@ -60,25 +60,48 @@ cd skillswap-campus-main
 npm install
 ```
 
-### 2. Running the Frontend (Local Development)
+---
 
-Start the Vite development server:
+### 💻 2. Starting the Frontend (React + Vite)
+
+To launch the **Frontend Application**:
 
 ```bash
+# Option A: Using NPM
 npm --prefix artifacts/skillswap run dev
+
+# Option B: Using PNPM
+pnpm dev:frontend
 ```
 
-Open your browser at: **`http://localhost:5173/`**
+🌐 **Local Host Link**: **[http://localhost:5173/](http://localhost:5173/)**
 
 > **Note**: In local demo mode, SkillSwap runs out-of-the-box using local storage and pre-configured demo student accounts.
 
-### 3. Running the Backend API Server (Optional)
+---
 
-If you are running the backend API server:
+### ⚙️ 3. Starting the Backend API Server (Express + Node.js)
+
+To launch the **Backend API Server**:
 
 ```bash
+# Option A: Using NPM
 npm --prefix artifacts/api-server run dev
+
+# Option B: Using PNPM
+pnpm dev:backend
 ```
+
+📡 **Backend Local Link**: **`http://localhost:3000/`** (or configured API port)
+
+---
+
+## ⚡ Quick Copy Starting Code Reference
+
+| Server | Starting Command (NPM) | Starting Command (PNPM) | Local Host URL |
+| :--- | :--- | :--- | :--- |
+| **Frontend UI** | `npm --prefix artifacts/skillswap run dev` | `pnpm dev:frontend` | **[http://localhost:5173/](http://localhost:5173/)** |
+| **Backend API** | `npm --prefix artifacts/api-server run dev` | `pnpm dev:backend` | **`http://localhost:3000/`** |
 
 ---
 
@@ -107,7 +130,7 @@ Detailed instructions are available in [LIVE_SETUP.md](./LIVE_SETUP.md).
 
 | Script | Command | Description |
 | :--- | :--- | :--- |
-| **Start Frontend** | `npm --prefix artifacts/skillswap run dev` | Launch Vite Dev Server (`localhost:5173`) |
+| **Start Frontend** | `npm --prefix artifacts/skillswap run dev` | Launch Vite Dev Server (`http://localhost:5173/`) |
 | **Start API Server** | `npm --prefix artifacts/api-server run dev` | Launch Express API Server |
 | **Typecheck** | `npm run typecheck` | Run TypeScript check across all workspace packages |
 | **Build Frontend** | `npm --prefix artifacts/skillswap run build` | Bundle frontend for production |
